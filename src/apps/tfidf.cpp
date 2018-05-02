@@ -28,6 +28,8 @@ void run(std::string filepath, vid_t num_docs, vid_t num_terms, uint32_t k, uint
   bf2_timer.stop();
   //bf2.display();
 
+  TFIDF bf3(bf1);
+
   double tfidf_time = 0, bf_time = 0;
 
   for (auto q = 0; q < num_queries; q++)
@@ -44,9 +46,10 @@ void run(std::string filepath, vid_t num_docs, vid_t num_terms, uint32_t k, uint
     DistTimer bf_timer("TFIDF with Blind Feedback");
 
     /* Step 3: score(D) = sum<t:D&Q>[log10(1 + tf(t,D)) * idf(t)] */
-    TFIDF bf3(bf1);
+    // TFIDF bf3(bf1);
     bf3.query_terms = &query_terms;
     DistTimer bf3_timer("BF Step 3: score(D) (for all t in Q) for all D where t in D");
+    bf3.reset();
     bf3.reset_activity();
     /* Optional: Step 3a: length(Q) = sum<t:Q>[log10(1 + tf(t,Q)) * idf(t)] *
     DistTimer bf3a_timer("BF Step 3a: length(Q) (for all t in Q)");

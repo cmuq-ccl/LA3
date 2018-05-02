@@ -134,6 +134,7 @@ template <class T>
 struct SerializableVector : std::vector<T>, Serializable
 {
   SerializableVector() {}
+  SerializableVector(size_t size) : std::vector<T>(size) {}
   SerializableVector(const std::vector<T>& other) : std::vector<T>(other) {}
   SerializableVector(const std::vector<T>&& other) : std::vector<T>(other) {}
 

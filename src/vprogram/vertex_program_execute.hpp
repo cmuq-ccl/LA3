@@ -27,6 +27,19 @@ void VertexProgram<W, M, A, S>::execute(uint32_t max_iters)
       else execute_single_2d<false>();
     }
   }
+  else if (not optimizable)
+  {
+    if (G->get_partitioning() == Partitioning::_1D_COL)
+    {
+      if (gather_depends_on_state) execute_1d_col_non_opt<true>(max_iters);
+      else execute_1d_col_non_opt<false>(max_iters);
+    }
+    else if (G->get_partitioning() == Partitioning::_2D)
+    {
+      if (gather_depends_on_state) execute_2d_non_opt<true>(max_iters);
+      else execute_2d_non_opt<false>(max_iters);
+    }
+  }
   else
   {
     if (G->get_partitioning() == Partitioning::_1D_COL)
@@ -205,6 +218,121 @@ void VertexProgram<W, M, A, S>::execute_1d_col(uint32_t max_iters)
     sink_timer.stop();
   }
   // LOG.info("Done with execute() \n");
+
+  /* Cleanup */
+  for (auto& yseg: y->local_segs) yseg.postprocess();
+  for (auto& yseg: y->local_segs_sink) yseg.postprocess();
+}
+
+
+template <class W, class M, class A, class S>
+template <bool mirroring>
+void VertexProgram<W, M, A, S>::execute_2d_non_opt(uint32_t max_iters)
+{
+  /* Initial Scatter */
+  scatter_source_messages();
+  reset_activity();
+
+  /* Main Loop (Regular AND Sink Processing (non-optimizable)) */
+  uint32_t iter = 0;
+  bool until_convergence = max_iters == UNTIL_CONVERGENCE;
+  bool has_converged = false;
+  MPI_Request convergence_req = MPI_REQUEST_NULL;
+
+  while (until_convergence ? not has_converged : iter < max_iters)
+  {
+    DistTimer it_timer("Iteration " + std::to_string(iter + 1));
+    LOG.info("Executing Iteration %u\n", iter + 1);
+
+    /* Request the current iteration's partial accumulators. */
+    for (auto& yseg : y->own_segs) yseg.gather(); // regular
+    for (auto& yseg : y->own_segs_sink) yseg.gather();  // sink
+
+    process_messages<false, Partitioning::_2D, mirroring>(iter);  // regular
+    process_messages<true, Partitioning::_2D, mirroring>(iter);  // sink
+
+    /* Request the next iteration's messages. */
+    for (auto& xseg : x->incoming.regular) xseg.recv();
+
+    has_converged = not produce_messages<false, false>(iter);  // regular
+    has_converged &= not produce_messages<true, false>(iter);  // sink
+
+    if (until_convergence)
+      has_converged = has_converged_globally(has_converged, convergence_req);
+
+    it_timer.stop();
+
+    iter++;
+  }
+
+  /* Final Wait (Regular Processing) */
+  DistTimer final_wait_timer("Final Wait");
+  LOG.debug("Final Wait \n");
+
+  do { x->wait_for_some(); }
+  while (not x->no_more_segs_then_clear());
+
+  for (auto& xseg: x->outgoing.regular) xseg.postprocess();
+  for (auto& xseg : x->incoming.regular)
+  {
+    xseg.clear();
+    xseg.irecv_postprocess(x->blobs[xseg.jth]);
+  }
+
+  if (gather_depends_on_state)
+    for (auto& vseg: v->own_segs) vseg.postprocess();
+
+  final_wait_timer.stop();
+
+  LOG.debug("Done with execute() \n");
+
+  /* Cleanup */
+  for (auto& xseg: x->outgoing.regular) xseg.postprocess();
+  for (auto& yseg: y->local_segs) yseg.postprocess();
+  for (auto& yseg: y->local_segs_sink) yseg.postprocess();
+}
+
+
+template <class W, class M, class A, class S>
+template <bool mirroring>
+void VertexProgram<W, M, A, S>::execute_1d_col_non_opt(uint32_t max_iters)
+{
+  reset_activity();
+
+  /* Main Loop (Regular Processing) */
+  uint32_t iter = 0;
+  bool until_convergence = max_iters == UNTIL_CONVERGENCE;
+  bool has_converged = false;
+  MPI_Request convergence_req = MPI_REQUEST_NULL;
+
+  while (until_convergence ? not has_converged : iter < max_iters)
+  {
+    DistTimer it_timer("Iteration " + std::to_string(iter + 1));
+    // LOG.info("Executing Iteration %u\n", iter + 1);
+
+    /* Request the current iteration's partial accumulators. */
+    for (auto& yseg : y->own_segs) yseg.gather();  // regular
+    for (auto& yseg : y->own_segs_sink) yseg.gather();  // sink
+
+    process_messages<false, Partitioning::_1D_COL, mirroring>(iter);  // regular
+    process_messages<true, Partitioning::_1D_COL, mirroring>(iter);  // sink
+
+    has_converged = not produce_messages<false, false>(iter);  // regular
+    has_converged &= not produce_messages<true, false>(iter);  // sink
+
+    if (until_convergence)
+      has_converged = has_converged_globally(has_converged, convergence_req);
+
+    it_timer.stop();
+
+    iter++;
+  }
+
+  /* Final Wait (Regular Processing) */
+  DistTimer final_wait_timer("Final Wait");
+  if (gather_depends_on_state)
+    for (auto& vseg: v->own_segs) vseg.postprocess();
+  final_wait_timer.stop();
 
   /* Cleanup */
   for (auto& yseg: y->local_segs) yseg.postprocess();

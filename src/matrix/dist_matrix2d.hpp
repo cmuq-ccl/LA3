@@ -82,7 +82,7 @@ DistMatrix2D<Weight, Tile>::DistMatrix2D(uint32_t nrows, uint32_t ncols, uint32_
     }
   }
 
-  // print_info();
+  print_info();
 }
 
 template <class Weight, class Tile>
@@ -144,9 +144,9 @@ void DistMatrix2D<Weight, Tile>::print_info()
 {
   /* Print assignment information. */
   LOG.info("#> Assigned the tiles to the %u ranks.\n"
-               "#> Each rank has been assigned %u local tiles across %u rowgroups and %u colgroups.\n"
-               "#> Each rowgroup is divided among %u ranks.\n"
-               "#> Each colgroup is divided among %u ranks.\n", nranks, rank_ntiles, rank_nrowgrps,
+           "#> Each rank has been assigned %u local tiles across %u rowgroups and %u colgroups.\n"
+           "#> Each rowgroup is divided among %u ranks.\n"
+           "#> Each colgroup is divided among %u ranks.\n", nranks, rank_ntiles, rank_nrowgrps,
            rank_ncolgrps, rowgrp_nranks, colgrp_nranks);
 
   /* Print a 2D grid of tiles, each annotated with the owner's rank. */
@@ -154,17 +154,17 @@ void DistMatrix2D<Weight, Tile>::print_info()
   {
     for (uint32_t cg = 0; cg < std::min(ncolgrps, 10u); cg++)
     {
-      LOG.info("%02d ", tiles[rg][cg].rank);
+      LOG.info<true, false>("%02d ", tiles[rg][cg].rank);
       // LOG.info("[%02d] ", tiles[x][y].nth);
     }
 
     if (ncolgrps > 10u)
-      LOG.info(" ...");
-    LOG.info("\n");
+      LOG.info<true, false>(" ...");
+    LOG.info<true, false>("\n");
   }
 
   if (nrowgrps > 10u)
-    LOG.info(" ...\n");
+    LOG.info<true, false>(" ...\n");
 }
 
 template <class Weight, class Tile>

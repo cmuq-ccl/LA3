@@ -23,6 +23,9 @@ void CSCMatrix2D<Weight, Annotation>::distribute()
 
   for (auto& colgrp : local_colgrps)
   {
+    if (colgrp.leader == Env::rank)
+      LOG.info<false, false>("|");
+
     #pragma omp parallel for schedule(static, 1)
     for (uint32_t j = 0; j < colgrp.local_tiles.size(); j++)
     {
@@ -80,4 +83,7 @@ void CSCMatrix2D<Weight, Annotation>::distribute()
       delete sink;
     }
   }
+
+  Env::barrier();
+  LOG.info<true, false>("\n");
 }

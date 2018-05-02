@@ -20,9 +20,7 @@ struct AnnotatedColGrp  /* Local Column Group, with non-empty local tiles. */
   uint32_t kth;             // Index among local dashboards; valid only if leader == rank.
 
   uint32_t range()
-  {
-    return endpos - offset;
-  }
+  { return endpos - offset; }
 };
 
 

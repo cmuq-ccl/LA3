@@ -89,9 +89,10 @@ int main(int argc, char* argv[])
   srand(0);
   while (!fin.eof())
   {
-    fin >> i >> j;
-    if (fin.eof())
-      break;
+    fin >> i;
+    if (fin.eof()) break;
+    fin >> j;
+
     fout.write(reinterpret_cast<const char*>(&i), sizeof(uint32_t));
     fout.write(reinterpret_cast<const char*>(&j), sizeof(uint32_t));
     if (weights_in)

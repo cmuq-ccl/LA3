@@ -23,7 +23,7 @@ Matrix2D<Weight, Tile>::Matrix2D(uint32_t nrows, uint32_t ncols, uint32_t ntiles
   for (uint32_t x = 0; x < ncolgrps; x++)
     tiles[x].resize(nrowgrps);
 
-  //print_info();
+  print_info();
 }
 
 template <class Weight, class Tile>
@@ -45,6 +45,6 @@ template <class Weight, class Tile>
 void Matrix2D<Weight, Tile>::print_info()
 {
   LOG.info("#> Created a square matrix with %u x %u entries and %u x %u tiles.\n"
-               "#> Each tile in the matrix has %u x %u entries.\n", nrows, ncols, nrowgrps,
+           "#> Each tile in the matrix has %u x %u entries.\n", nrows, ncols, nrowgrps,
            ncolgrps, tile_height, tile_width);
 }

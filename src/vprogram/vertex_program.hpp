@@ -73,11 +73,11 @@ void VertexProgram<W, M, A, S>::initialize_flags()
   gather_depends_on_state = true;
   gather(edge, msg, state);
   apply_depends_on_iter = true;
-  this->apply(accum, (S&) state, 0);
+  apply(accum, (S&) state, 0);
   optimizable &= not (not G->is_directed() or gather_depends_on_state or apply_depends_on_iter);
   initialized = true;
-  //LOG.info("optimizable %u, gather_depends_on_state %u, apply_depends_on_iter %u \n",
-  //         optimizable, gather_depends_on_state, apply_depends_on_iter);
+  LOG.debug("optimizable %u, gather_depends_on_state %u, apply_depends_on_iter %u \n",
+            optimizable, gather_depends_on_state, apply_depends_on_iter);
 }
 
 

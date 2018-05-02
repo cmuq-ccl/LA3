@@ -32,7 +32,7 @@ all: clean tools apps
 clean:
 	rm -rf bin
 
-apps: degree pr sssp bfs cc tc tfidf tfidf_batch
+apps: degree pr sssp bfs cc tc tfidf tfidf_batch graphsim
 
 tools:
 	@mkdir -p bin

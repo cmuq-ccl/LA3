@@ -139,23 +139,17 @@ void ProcessedMatrix2D<Weight, Annotation>::preprocess()
   assert(rowgrp_inblobs.size() == 0);
   assert(colgrp_inblobs.size() == 0);
 
-  {
-    wait_all(colgrp_outreqs);
+  wait_all(colgrp_outreqs);
 
-    uint32_t idx = 0;
-    for (auto& db : dashboards)
-      for (auto& m : db.colgrp_ranks_meta)
-        m.regular.isend_postprocess(colgrp_outblobs.at(idx++));
+  uint32_t idx = 0;
+  for (auto& db : dashboards)
+    for (auto& m : db.colgrp_ranks_meta)
+      m.regular.isend_postprocess(colgrp_outblobs.at(idx++));
 
-    colgrp_outblobs.clear();
-  }
+  colgrp_outblobs.clear();
 
-  {
-    for (auto& db : dashboards)
-    {
-      db.locator->for_dashboard(*db.regular, *db.sink, *db.source);
-    }
-  }
+  for (auto& db : dashboards)
+    db.locator->for_dashboard(*db.regular, *db.sink, *db.source);
 
   /* Just to print some stats... */
   /*

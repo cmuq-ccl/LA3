@@ -248,7 +248,10 @@ private:
   VectorY* y = nullptr;  /** Accumulator vector **/
 
 
-  /* Specialized Implementations of execute() with/without vertex mirroring. */
+  /*
+   * Specialized implementations of execute() with/without
+   * vertex mirroring and sinks-factored-out optimizations.
+   */
 
   /**
    * Execute the vertex program for given number of iterations or (by default) until convergence.
@@ -262,6 +265,19 @@ private:
    **/
   template <bool mirroring>
   void execute_1d_col(uint32_t max_iters);
+
+  /**
+   * Execute the vertex program for given number of iterations or (by default) until convergence.
+   **/
+  template <bool mirroring>
+  void execute_2d_non_opt(uint32_t max_iters);
+
+  /**
+   * Execute the vertex program for given number of iterations or (by default) until convergence.
+   * Using pseudo-1D col-wise partitioning (see matrix/graph.h).
+   **/
+  template <bool mirroring>
+  void execute_1d_col_non_opt(uint32_t max_iters);
 
   /**
    * Execute the vertex program for one iteration only (optimized).

@@ -31,16 +31,13 @@ struct ProcessedDashboard : AnnotatedDashboard<RowGrp, ColGrp>
 {
   using BV = Communicable<SerializableBitVector>;
 
-
   struct RanksMeta
   {
     RanksMeta() {}  // for FixedVector allocation
 
     RanksMeta(uint32_t rank, uint32_t range)
         : sub_regular(range), sub_other(range), regular(range), other(range), rank(rank)
-    {
-      generated_sub_regular = false;
-    }
+    { generated_sub_regular = false; }
 
     BV sub_regular;  // size == count of globally regular, count == count of locally regular
     BV sub_other;    // other could be source or sink, based on colgrp or rowgrp, respectively
@@ -113,14 +110,10 @@ struct ProcessedDashboard : AnnotatedDashboard<RowGrp, ColGrp>
   ProcessedDashboard() {}  // for FixedVector allocation
 
   static uint32_t rowgrp_tag(uint32_t uth, bool sink = false)
-  {
-    return sink ? (6 * uth + 1) : (6 * uth);
-  }
+  { return sink ? (6 * uth + 1) : (6 * uth); }
 
   static uint32_t colgrp_tag(uint32_t uth, bool source = false)
-  {
-    return source ? (6 * uth + 5) : (6 * uth + 4);
-  }
+  { return source ? (6 * uth + 5) : (6 * uth + 4); }
 };
 
 
