@@ -3,7 +3,7 @@
 
 #include <cassert>
 #include <cmath>
-#include "apps/degree.h"
+#include "degree.h"
 
 
 /* Calculate Pagerank for a directed graph. */

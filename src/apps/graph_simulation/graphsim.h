@@ -3,7 +3,7 @@
 
 #include <cassert>
 #include "vprogram/vertex_program.h"
-#include "apps/graphsim_query.h"
+#include "graphsim_query.h"
 
 using namespace std;
 

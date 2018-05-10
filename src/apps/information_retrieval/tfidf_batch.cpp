@@ -2,7 +2,7 @@
 #include <cstdlib>
 #include <set>
 #include "utils/dist_timer.h"
-#include "apps/tfidf.h"
+#include "tfidf_batch.h"
 
 
 template <bool random_query>
@@ -32,14 +32,21 @@ void run(std::string filepath, vid_t num_docs, vid_t num_terms, uint32_t k, uint
 
   double tfidf_time = 0, bf_time = 0;
 
+  std::set<vid_t> queries[BATCH_SIZE];
+
   for (auto q = 0; q < num_queries; q++)
   {
     //Env::barrier();
-    if (random_query)  // no input query terms; generate r random terms
+    for (auto b = 0; b < BATCH_SIZE; b++)  // batched queries
     {
-      query_terms.clear();
-      for (auto i = 0; i < num_query_terms; i++)
-        query_terms.insert((rand() % BP::nt) + 1 + BP::nd);  // shift +nd for bipartite matrix
+      if (random_query)  // no input query terms; generate r random terms
+      {
+        queries[b].clear();
+        for (auto i = 0; i < num_query_terms; i++)
+          queries[b].insert((rand() % BP::nt) + 1 + BP::nd);  // shift +nd for bipartite matrix
+      }
+      else
+        queries[b] = query_terms;
     }
 
     DistTimer tfidf_timer("TFIDF");
@@ -47,10 +54,11 @@ void run(std::string filepath, vid_t num_docs, vid_t num_terms, uint32_t k, uint
 
     /* Step 3: score(D) = sum<t:D&Q>[log10(1 + tf(t,D)) * idf(t)] */
     // TFIDF bf3(bf1);
-    bf3.query_terms = &query_terms;
+    for (auto b = 0; b < BATCH_SIZE; b++)
+      bf3.queries[b] = &queries[b];
     DistTimer bf3_timer("BF Step 3: score(D) (for all t in Q) for all D where t in D");
-    bf3.reset();
-    bf3.reset_activity();
+    bf3.reset();            // Clear msg and accum vectors
+    bf3.reset_activity();   // Clear state vector
     /* Optional: Step 3a: length(Q) = sum<t:Q>[log10(1 + tf(t,Q)) * idf(t)] *
     DistTimer bf3a_timer("BF Step 3a: length(Q) (for all t in Q)");
     fp_t qlength = sqrt(bf3.reduce<fp_t>(
@@ -66,24 +74,29 @@ void run(std::string filepath, vid_t num_docs, vid_t num_terms, uint32_t k, uint
 
     /* Step 4: Get top-k docs with scores */
     using iv_t = std::pair<vid_t, fp_t>;
-    std::vector<iv_t> topk;
+    std::vector<iv_t> topk[BATCH_SIZE];
     DistTimer bf4_timer("BF Step 4: top-k docs for Q");
-    bf3.topk<vid_t, fp_t>(k, topk,
-        [&](vid_t vid, const DtState& s) { return vid <= BP::nd ? s.score / s.length : 0; },  // mapper
+    bf3.btopk<BATCH_SIZE, vid_t, fp_t>(k, topk,
+        [&](vid_t vid, const DtState& s) -> fp_t*
+           { return vid <= BP::nd ? (fp_t*) s.scores : nullptr; },  // mapper
         [&](const iv_t& a, const iv_t& b) { return a.second > b.second; },  // comparator
         true);  // among active only
     bf4_timer.stop();
     tfidf_timer.stop();
-    if (num_queries == 1 and r == 0)  // for correctness checking
+    if (num_queries <= 2 and r == 0)  // for correctness checking
     {
-      LOG.info("top-%d docs: \n", k);
-      for(auto iv : topk)
-        LOG.info("idx %d: score %lf \n", iv.first, iv.second);
+      for (auto b = 0; b < BATCH_SIZE; b++)
+      {
+        LOG.info("q-%u: top-%d docs: \n", b+1, k);
+        for(auto iv : topk[b])
+          LOG.info("idx %d: score %lf \n", iv.first, iv.second);
+      }
     }
 
-    if (r > 0)
+    /*
+    (r > 0)
     {
-      /* Step 5: Expand Q to all terms in top-k docs */
+      /* Step 5: Expand Q to all terms in top-k docs *
       QE bf5(bf1);
       std::set<vid_t> docs;
       for (auto iv : topk)
@@ -95,7 +108,7 @@ void run(std::string filepath, vid_t num_docs, vid_t num_terms, uint32_t k, uint
       bf5_timer.stop();
       //bf5.display();
 
-      /* Step 6: Get top-r terms with idf */
+      /* Step 6: Get top-r terms with idf *
       std::vector<iv_t> topr;
       DistTimer bf6_timer("BF Step 6: Q' = top-r terms in QE");
       bf5.topk<vid_t, fp_t>(r, topr,
@@ -107,7 +120,7 @@ void run(std::string filepath, vid_t num_docs, vid_t num_terms, uint32_t k, uint
       //for (auto iv : topr)
         //LOG.info("idx %d: idf %lf \n", iv.first - BP::nd, iv.second);
 
-      /* Step 7: score(D) = sum<t:D&QE>[log10(1 + tf(t,D)) * idf(t)] */
+      /* Step 7: score(D) = sum<t:D&QE>[log10(1 + tf(t,D)) * idf(t)] *
       TFIDF bf7(bf1);
       std::set<vid_t> equery(query_terms);
       for (auto iv : topr)
@@ -123,12 +136,12 @@ void run(std::string filepath, vid_t num_docs, vid_t num_terms, uint32_t k, uint
           true));  // reduce active only
       bf7a_timer.stop();
       LOG.info("length(Q') = %lf \n", qlength);
-      /**/
+      /**
       bf7.execute(1);  // niters = 1
       bf7_timer.stop();
       //bf7.display();
 
-      /* Step 8: Get top-k docs with scores */
+      /* Step 8: Get top-k docs with scores *
       DistTimer bf8_timer("BF Step 8: top-k docs for Q'");
       bf7.topk<vid_t, fp_t>(k, topk,
           [&](vid_t vid, const DtState& s) { return vid <= BP::nd ? s.score / s.length : 0; },  // mapper
@@ -142,6 +155,7 @@ void run(std::string filepath, vid_t num_docs, vid_t num_terms, uint32_t k, uint
           LOG.info("idx %d: score %lf \n", iv.first, iv.second);
       }
     }
+    */
     bf_timer.stop();
 
     /* Report timers */
@@ -159,8 +173,8 @@ void run(std::string filepath, vid_t num_docs, vid_t num_terms, uint32_t k, uint
     bf_time += bf_timer.report(false);
   }
 
-  LOG.info("TFIDF time: %lf \n", tfidf_time / num_queries);
-  LOG.info("TFIDF with Blind Feedback time: %lf \n", bf_time / num_queries);
+  LOG.info("TFIDF tput: %lf qps \n", (num_queries * BATCH_SIZE) / tfidf_time);
+  LOG.info("TFIDF w/ Blind Feedback tput: %lf qps \n", (num_queries * BATCH_SIZE) / bf_time);
 }
 
 

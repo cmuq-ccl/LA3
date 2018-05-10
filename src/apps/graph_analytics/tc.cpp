@@ -2,7 +2,7 @@
 #include <cstdlib>
 #include <functional>
 #include "utils/dist_timer.h"
-#include "apps/tc.h"
+#include "tc.h"
 
 
 /* Count triangles in a graph. */

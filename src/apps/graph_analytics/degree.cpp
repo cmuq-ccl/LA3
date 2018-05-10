@@ -3,7 +3,7 @@
 #include <functional>
 #include "utils/env.h"
 #include "utils/dist_timer.h"
-#include "apps/degree.h"
+#include "degree.h"
 
 
 /* Calculate in-degrees or out-degrees for a directed input graph. */

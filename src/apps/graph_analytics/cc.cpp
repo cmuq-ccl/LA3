@@ -2,7 +2,7 @@
 #include <cstdlib>
 #include <functional>
 #include "utils/dist_timer.h"
-#include "apps/cc.h"
+#include "cc.h"
 
 
 /* Identify the connected components in an undirected graph. */

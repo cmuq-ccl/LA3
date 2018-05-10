@@ -2,23 +2,23 @@
 #include <cstdlib>
 #include <functional>
 #include "utils/dist_timer.h"
-#include "apps/sssp.h"
+#include "bfs.h"
 
 
-/* Find shortest paths from a given root vertex to all vertices of a weighted directed graph. */
+/* Perform undirected BFS on a graph starting from a given root vertex. */
 
 
 void run(std::string filepath, vid_t nvertices, vid_t root)
 {
   Graph<ew_t> G;
-  G.load_directed(true, filepath, nvertices);
+  G.load_undirected(true, filepath, nvertices);
 
-  SpVertex vp(&G);
+  BfsVertex vp(&G);
   vp.root = root;
   vp.initialize();
 
   Env::barrier();
-  DistTimer timer("SSSP Execution");
+  DistTimer timer("BFS Execution");
   vp.execute();  // until convergence
   timer.stop();
 
@@ -26,13 +26,13 @@ void run(std::string filepath, vid_t nvertices, vid_t root)
   timer.report();
 
   long nreachable = vp.reduce<long>(
-      [&](uint32_t vid, const SpState& s) -> long { return s.distance != INF; },  // mapper
+      [&](uint32_t vid, const BfsState& s) -> long { return s.hops != INF; },  // mapper
       [&](long& a, const long& b) { a += b; });  // reducer
   LOG.info("Reachable Vertices = %lu \n", nreachable);
 
   /* For correctness checking */
   long checksum = vp.reduce<long>(
-      [&](uint32_t vid, const SpState& s) -> long { return s.distance.value; },  // mapper
+      [&](uint32_t idx, const BfsState& s) -> long { return s.hops * s.parent; },  // mapper
       [&](long& a, const long& b) { a += b; });  // reducer
   LOG.info("Checksum = %lu \n", checksum);
 }

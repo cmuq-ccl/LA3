@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <string>
 #include <cmath>
-#include <structures/static_bitvector.h>
+#include "structures/static_bitvector.h"
 #include "vprogram/vertex_program.h"
 
 
