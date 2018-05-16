@@ -253,3 +253,10 @@ void Graph<Weight>::load_bipartite(
     load_text(filepath_, nvertices_, mvertices_, directed, reverse_edges, false,
               hashing_, partitioning_);
 }
+
+
+template <class Weight>
+void Graph<Weight>::load_labels(std::string& filepath_)
+{
+
+}

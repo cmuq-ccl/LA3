@@ -15,6 +15,9 @@ Log& Log::instance()
 }
 
 
+LogLevel Log::get_log_level()
+{ return level_; }
+
 void Log::set_log_level(LogLevel level)
 { level_ = level; }
 

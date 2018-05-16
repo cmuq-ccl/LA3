@@ -5,12 +5,13 @@
 #include <fstream>
 #include <vector>
 #include <iostream>
+#include <utils/log.h>
 
 
 using namespace std;
 
 
-void read_labels(string filepath, vector<string>& labels)
+void read_labels(string& filepath, vector<string>& labels)
 {
   ifstream fin(filepath);
   while (not fin.eof())
@@ -29,7 +30,7 @@ struct Query
   vector<string> labels;         // vertex labels
   vector<vector<int>> children;  // adjacency list
 
-  Query(string qgl_filepath, string qgm_filepath)
+  Query(string& qgl_filepath, string& qgm_filepath)
   {
     read_labels(qgl_filepath, labels);
 

@@ -49,6 +49,8 @@ public:
 
   static Log& instance();
 
+  LogLevel get_log_level();
+
   void set_log_level(LogLevel level);
 
   void set_at_master_only(bool at_master_only);

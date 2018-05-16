@@ -49,6 +49,8 @@ public:
                       Hashing hashing_ = Hashing::NONE,
                       Partitioning partitioning_ = Partitioning::_2D);
 
+  void load_labels(std::string& filepath_);
+
 
   /* Delete the underlying matrix. */
 

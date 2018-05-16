@@ -11,38 +11,81 @@
  */
 
 
-void run(string dgl_filepath, string dgm_filepath,
-         string qgl_filepath, string qgm_filepath)
+void read_labels_json(string& filepath, vector<string>& labels)
 {
-  std::vector<string> dg_labels;
-  read_labels(dgl_filepath, dg_labels);
+  ifstream fin(filepath);
 
-  Query query(qgl_filepath, qgm_filepath);
+  if (not fin.good())
+    LOG.fatal("Could not read file %s \n", filepath.c_str());
 
+  constexpr size_t BUFF_SIZE = 2048;
+  char buffer[BUFF_SIZE];
+
+  fin.getline(buffer, BUFF_SIZE);  // should be "["
+
+  for (auto i = 0; i < labels.size(); i++)
+  {
+    // line format example: {"d":"edu"},
+    fin.getline(buffer, BUFF_SIZE);
+
+    if (i == 0 and strcmp(buffer, "null,") == 0)  // when there's no vertex 0
+      continue;
+
+    char* token = strtok(buffer, ":");  // token = {"edu"
+    token = strtok(nullptr, ":");       // token = "edu"},
+    token = strtok(token + 1, "\"");    // token = edu
+    labels[i] = string(token);
+  }
+
+  fin.close();
+}
+
+
+void run(string& dgl_filepath, string& dgm_filepath, vid_t nvertices,
+         string& qgl_filepath, string& qgm_filepath)
+{
   // Read reversed graph for back-propagation (and for calculating out-degrees).
   Graph<ew_t> GR;
-  GR.load_directed(true, dgm_filepath, dg_labels.size(), true);  // reverse
+  GR.load_directed(true, dgm_filepath, nvertices, true);  // reverse
 
-  /* GraphSim vertex program */
+  /* GraphSim execution and initialization vertex programs */
   GsVertex vp(&GR);
-  vp.labels = &dg_labels;
+  InitVertex vp_init(vp, true);  // stationary
+
+  /* Read labels, initialize vertices, and calculate their out-degrees */
+  std::vector<string> dg_labels(nvertices);
+  read_labels_json(dgl_filepath, dg_labels);
+  vp_init.labels = &dg_labels;
+
+  DistTimer init_timer("Init Execution");
+  vp_init.execute(1);
+  init_timer.stop();
+  //vp_init.display();
+
+  /* Load query and perform graph simulation */
+  Env::barrier();
+  Query query(qgl_filepath, qgm_filepath);
   vp.q = &query;
 
-  /* Calculate out-degrees */
-  DegVertex vp_degree(vp, true);  // stationary
-  DistTimer degree_timer("Degree Execution");
-  vp_degree.execute(1);
-  degree_timer.stop();
-  vp_degree.display();
-
-  /* Perform graph simulation */
-  Env::barrier();
   DistTimer gs_timer("GraphSim Execution");
   vp.execute();  // until convergence
   gs_timer.stop();
+  //vp.display();
 
-  vp.display();
-  degree_timer.report();
+  /* For correctness checking */
+  vid_t nmatches = vp.reduce<vid_t>(
+      [&](uint32_t idx, const GsState& s) -> vid_t  // mapper
+        {
+          // If even one query node is matched '1' or undecided 'U', then the vertex was matched.
+          // That is, if none of the query nodes matched, then the vertex was mismatched.
+          for (auto r : s.res)  // check result against each query node
+            if (r != '0') return 1;  // matched
+          return 0;  // mismatched
+        },
+      [&](vid_t& a, const vid_t& b) { a += b; });  // reducer
+  LOG.info("Matches = %u \n", nmatches);
+
+  init_timer.report();
   gs_timer.report();
 }
 
@@ -54,9 +97,9 @@ int main(int argc, char* argv[])
   LOG.set_log_level(LogLevel::DEBUG);
 
   /* Print usage. */
-  if (argc < 5)
+  if (argc < 6)
   {
-    LOG.info("Usage: %s <data_graph_labels_filepath> <data_graph_matrix_filepath> "
+    LOG.info("Usage: %s <data_graph_labels_filepath> <data_graph_matrix_filepath> <nvertices> "
                  "<query_graph_labels_filepath> <query_graph_matrix_filepath> \n",
              argv[0]);
     Env::exit(1);
@@ -65,10 +108,11 @@ int main(int argc, char* argv[])
   /* Read input arguments. */
   string dgl_filepath = argv[1];
   string dgm_filepath = argv[2];
-  string qgl_filepath = argv[3];
-  string qgm_filepath = argv[4];
+  vid_t nvertices = (vid_t) atoi(argv[3]);
+  string qgl_filepath = argv[4];
+  string qgm_filepath = argv[5];
 
-  run(dgl_filepath, dgm_filepath, qgl_filepath, qgm_filepath);
+  run(dgl_filepath, dgm_filepath, nvertices, qgl_filepath, qgm_filepath);
 
   Env::finalize();
   return 0;

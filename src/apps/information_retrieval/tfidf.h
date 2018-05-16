@@ -21,11 +21,32 @@ struct TState { fp_t idf = 0.0; };
 
 struct DtState : DState, TState, State
 {
+  std::string label;
+
   std::string to_string() const
-  { return "{doc: (" + std::to_string(score) + ", " + std::to_string(length) + "), "
-           + "{term: (" + std::to_string(idf) + ")}"; }
+  { return "{label: " + label + ", "
+           + "doc: (" + std::to_string(score) + ", " + std::to_string(length) + "), "
+           + "term: (" + std::to_string(idf) + ")}"; }
 };
 
+
+/* null vertex program for initializing vertices with their labels */
+class VP : public VertexProgram<ew_t, Empty, Empty, DtState>  // <Weight, Msg, Accum, State>
+{
+public:
+  using W = ew_t; using M = Empty; using A = Empty; using S = DtState;
+  using VertexProgram<W, M, A, S>::VertexProgram;  // inherit constructors
+
+  const std::string* label_data = nullptr;
+  const std::vector<size_t>* label_ptrs = nullptr;
+
+  bool init(vid_t vid, DtState& s)
+  {
+    if (vid > 0)
+       s.label = std::string((char*) label_data->data() + (*label_ptrs)[vid - 1]);
+    return false;
+  }
+};
 
 /* idf(t) = log10(nd / in-degree(t)) */
 class IDF : public VertexProgram<ew_t, Empty, fp_t, DtState>  // <Weight, Msg, Accum, State>
@@ -34,7 +55,7 @@ public:
   using W = ew_t; using M = Empty; using A = fp_t; using S = DtState;
   using VertexProgram<W, M, A, S>::VertexProgram;  // inherit constructors
 
-  bool init(uint32_t vid, DtState& s)
+  bool init(vid_t vid, DtState& s)
   { return vid <= BP::nd; }  // activate docs only
 
   M scatter(const DtState& s) { return M(); }  // doc -> msg(empty) -> term
@@ -51,12 +72,12 @@ public:
   using W = ew_t; using M = fp_t; using A = fp_t; using S = DtState;
   using VertexProgram<W, M, A, S>::VertexProgram;  // inherit constructors
 
-  const std::set<uint32_t>* query_terms = nullptr;
+  const std::unordered_set<std::string>* query_terms = nullptr;
 
-  bool init(uint32_t vid, DtState& s)  // activate query terms only
+  bool init(vid_t vid, DtState& s)  // activate query terms only
   {
     assert(query_terms);
-    return vid > BP::nd && query_terms->count(vid) == 1;
+    return vid > BP::nd && query_terms->count(s.label) > 0;
   }
 
   M scatter(const DtState& s) { return s.idf; }  // term -> msg(idf) -> doc
@@ -73,7 +94,7 @@ public:
   using W = ew_t; using M = fp_t; using A = fp_t; using S = DtState;
   using VertexProgram<W, M, A, S>::VertexProgram;  // inherit constructors
 
-  bool init(uint32_t vid, DtState& s)
+  bool init(vid_t vid, DtState& s)
   { return vid > BP::nd; }  // activate terms only
 
   M scatter(const DtState& s) { return s.idf; }  // term -> msg(idf) -> doc
@@ -90,9 +111,9 @@ public:
   using W = ew_t; using M = Empty; using A = Empty; using S = DtState;
   using VertexProgram<W, M, A, S>::VertexProgram;  // inherit constructors
 
-  const std::set<uint32_t>* docs = nullptr;
+  const std::set<vid_t>* docs = nullptr;
 
-  bool init(uint32_t vid, DtState& s)  // activate top-k docs only
+  bool init(vid_t vid, DtState& s)  // activate top-k docs only
   {
     assert(docs);
     return vid <= BP::nd && docs->count(vid) == 1;

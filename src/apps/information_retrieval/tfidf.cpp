@@ -1,53 +1,142 @@
 #include <cstdio>
 #include <cstdlib>
 #include <set>
+#include <unordered_map>
+#include <fstream>
 #include "utils/dist_timer.h"
 #include "tfidf.h"
 
+using namespace std;
 
-template <bool random_query>
-void run(std::string filepath, vid_t num_docs, vid_t num_terms, uint32_t k, uint32_t r,
-         uint32_t num_queries, uint32_t num_query_terms, std::set<vid_t> query_terms)
+
+size_t count_lines(string& filepath)
 {
+  size_t num_lines = 0;
+  ifstream fin(filepath);
+  if (not fin.good())
+    LOG.fatal("Could not read file %s \n", filepath.c_str());
+  while (not fin.eof())
+  {
+    constexpr size_t BUFF_SIZE = 2048;
+    char buffer[BUFF_SIZE];
+    fin.getline(buffer, BUFF_SIZE);
+    if (strlen(buffer) == 0 or fin.eof())
+      break;
+    num_lines++;
+  }
+  fin.close();
+  return num_lines;
+}
+
+
+void load_labels(string& filepath, size_t nvertices,
+                 string& label_data, vector<size_t>& label_ptrs)
+{
+  ifstream fin(filepath);
+  string label;
+  for (auto i = 0; i < nvertices; i++)
+  {
+    label_ptrs[i] = label_data.size();
+    label.clear();
+    fin >> label;
+    label_data += label + " ";
+    label_data[label_data.size() - 1] = '\0';
+  }
+  fin.close();
+  label_data.shrink_to_fit();
+}
+
+
+void load_queries(string& filepath, vector<unordered_set<string>>& queries)
+{
+  size_t num_lines = count_lines(filepath);
+  queries.resize(num_lines);
+  ifstream fin(filepath);
+  for (auto i = 0; i < num_lines; i++)
+  {
+    constexpr size_t BUFF_SIZE = 2048;
+    char buffer[BUFF_SIZE];
+    fin.getline(buffer, BUFF_SIZE);
+    if (fin.eof())
+      break;
+    char* token = strtok(buffer, " ");
+    while (token)
+    {
+      queries[i].insert(string(token));
+      token = strtok(nullptr, " ");
+    }
+  }
+  fin.close();
+}
+
+
+void run(string& filepath_graph, string& filepath_labels, string& filepath_queries,
+         uint32_t k, uint32_t r)
+{
+  LOG.info("Loading labels ... \n");
+  string label_data;
+  size_t nvertices = BP::nd + BP::nt;
+  vector<size_t> label_ptrs(nvertices);
+  load_labels(filepath_labels, nvertices, label_data, label_ptrs);
+  LOG.info<false>("Labels: %lu (%lu bytes) \n", label_ptrs.size(), label_data.size());
+
+  Env::barrier();
+  sleep(10);
+
+  LOG.info("Loading queries ... \n");
+  vector<unordered_set<string>> queries;
+  load_queries(filepath_queries, queries);
+  LOG.info("Queries: %lu \n", queries.size());
+
+  Env::barrier();
+  sleep(10);
+
   /* Load bidirectional bipartite graph */
   Graph<ew_t> G;
-  G.load_bipartite(true, filepath, num_docs, num_terms, false);  // undirected
+  G.load_bipartite(true, filepath_graph, BP::nd, BP::nt, false);  // undirected
+
+  /* Step 0: initialize labels */
+  VP bf0(&G);
+  bf0.label_data = &label_data;
+  bf0.label_ptrs = &label_ptrs;
+  DistTimer bf0_timer("BF Step 0: initialize labels");
+  bf0.initialize();
+  bf0_timer.stop();
+  label_data.resize(0);
+  label_ptrs.resize(0);
+  if (LOG.get_log_level() == LogLevel::DEBUG)
+    bf0.display();
 
   /* Step 1: idf(t) = log10(nd / in-degree(t)) */
-  IDF bf1(&G);
+  IDF bf1(bf0);
   DistTimer bf1_timer("BF Step 1: idf(t) for all t in C");
   bf1.execute(1);  // niters = 1
   bf1_timer.stop();
-  //bf1.display();
+  if (LOG.get_log_level() == LogLevel::DEBUG)
+    bf1.display();
 
   /* Step 2: length(D) = sum<t:D>[log10(1 + tf(t,D)) * idf(t)] */
-  DL bf2(bf1);
+  DL bf2(bf0);
   DistTimer bf2_timer("BF Step 2: length(D) (for all t in D) for all D");
   bf2.reset_activity();
   bf2.execute(1);  // niters = 1
   bf2_timer.stop();
-  //bf2.display();
+  if (LOG.get_log_level() == LogLevel::DEBUG)
+    bf2.display();
 
-  TFIDF bf3(bf1);
+  TFIDF bf3(bf0);
 
   double tfidf_time = 0, bf_time = 0;
 
-  for (auto q = 0; q < num_queries; q++)
+  for (auto query : queries)
   {
     //Env::barrier();
-    if (random_query)  // no input query terms; generate r random terms
-    {
-      query_terms.clear();
-      for (auto i = 0; i < num_query_terms; i++)
-        query_terms.insert((rand() % BP::nt) + 1 + BP::nd);  // shift +nd for bipartite matrix
-    }
-
     DistTimer tfidf_timer("TFIDF");
     DistTimer bf_timer("TFIDF with Blind Feedback");
 
     /* Step 3: score(D) = sum<t:D&Q>[log10(1 + tf(t,D)) * idf(t)] */
-    // TFIDF bf3(bf1);
-    bf3.query_terms = &query_terms;
+    // TFIDF bf3(bf0);
+    bf3.query_terms = &query;
     DistTimer bf3_timer("BF Step 3: score(D) (for all t in Q) for all D where t in D");
     bf3.reset();
     bf3.reset_activity();
@@ -62,11 +151,12 @@ void run(std::string filepath, vid_t num_docs, vid_t num_terms, uint32_t k, uint
     /**/
     bf3.execute(1);  // niters = 1
     bf3_timer.stop();
-    //bf3.display();
+    if (LOG.get_log_level() == LogLevel::DEBUG)
+      bf3.display();
 
     /* Step 4: Get top-k docs with scores */
-    using iv_t = std::pair<vid_t, fp_t>;
-    std::vector<iv_t> topk;
+    using iv_t = pair<vid_t, fp_t>;
+    vector<iv_t> topk;
     DistTimer bf4_timer("BF Step 4: top-k docs for Q");
     bf3.topk<vid_t, fp_t>(k, topk,
         [&](vid_t vid, const DtState& s) { return vid <= BP::nd ? s.score / s.length : 0; },  // mapper
@@ -74,7 +164,7 @@ void run(std::string filepath, vid_t num_docs, vid_t num_terms, uint32_t k, uint
         true);  // among active only
     bf4_timer.stop();
     tfidf_timer.stop();
-    if (num_queries == 1 and r == 0)  // for correctness checking
+    if (queries.size() == 1 and r == 0)  // for correctness checking
     {
       LOG.info("top-%d docs: \n", k);
       for(auto iv : topk)
@@ -84,8 +174,8 @@ void run(std::string filepath, vid_t num_docs, vid_t num_terms, uint32_t k, uint
     if (r > 0)
     {
       /* Step 5: Expand Q to all terms in top-k docs */
-      QE bf5(bf1);
-      std::set<vid_t> docs;
+      QE bf5(bf0);
+      set<vid_t> docs;
       for (auto iv : topk)
         docs.insert(iv.first);
       bf5.docs = &docs;
@@ -93,10 +183,11 @@ void run(std::string filepath, vid_t num_docs, vid_t num_terms, uint32_t k, uint
       bf5.reset_activity();
       bf5.execute(1);  // niters = 1
       bf5_timer.stop();
-      //bf5.display();
+      if (LOG.get_log_level() == LogLevel::DEBUG)
+        bf5.display();
 
       /* Step 6: Get top-r terms with idf */
-      std::vector<iv_t> topr;
+      vector<iv_t> topr;
       DistTimer bf6_timer("BF Step 6: Q' = top-r terms in QE");
       bf5.topk<vid_t, fp_t>(r, topr,
           [&](vid_t vid, const DtState& s) { return vid > BP::nd ? s.idf : 0; },  // mapper
@@ -108,10 +199,11 @@ void run(std::string filepath, vid_t num_docs, vid_t num_terms, uint32_t k, uint
         //LOG.info("idx %d: idf %lf \n", iv.first - BP::nd, iv.second);
 
       /* Step 7: score(D) = sum<t:D&QE>[log10(1 + tf(t,D)) * idf(t)] */
-      TFIDF bf7(bf1);
-      std::set<vid_t> equery(query_terms);
-      for (auto iv : topr)
-        equery.insert(iv.first);
+      TFIDF bf7(bf0);
+      unordered_set<string> equery(query);
+      // TODO:
+      //for (auto iv : topr)
+      //  equery.insert(iv.first);
       bf7.query_terms = &equery;
       DistTimer bf7_timer("BF Step 7: tf-idf(D) for all t in Q' for all D where t in D");
       bf7.reset_activity();
@@ -126,7 +218,8 @@ void run(std::string filepath, vid_t num_docs, vid_t num_terms, uint32_t k, uint
       /**/
       bf7.execute(1);  // niters = 1
       bf7_timer.stop();
-      //bf7.display();
+      if (LOG.get_log_level() == LogLevel::DEBUG)
+        bf7.display();
 
       /* Step 8: Get top-k docs with scores */
       DistTimer bf8_timer("BF Step 8: top-k docs for Q'");
@@ -135,7 +228,7 @@ void run(std::string filepath, vid_t num_docs, vid_t num_terms, uint32_t k, uint
           [&](const iv_t& a, const iv_t& b) { return a.second > b.second; },  // comparator
           true);  // among active only
       bf8_timer.stop();
-      if (num_queries == 1)  // for correctness checking
+      if (queries.size() == 1)  // for correctness checking
       {
         LOG.info("top-%d docs: \n", k);
         for (auto iv : topk)
@@ -145,22 +238,26 @@ void run(std::string filepath, vid_t num_docs, vid_t num_terms, uint32_t k, uint
     bf_timer.stop();
 
     /* Report timers */
-    //bf1_timer.report();
-    //bf2_timer.report();
-    //bf3_timer.report();
-    //bf3a_timer.report();
-    //bf4_timer.report();
-    //bf5_timer.report();
-    //bf6_timer.report();
-    //bf7_timer.report();
-    //bf7a_timer.report();
-    //bf8_timer.report();
+    if (LOG.get_log_level() == LogLevel::DEBUG)
+    {
+      bf0_timer.report();
+      bf1_timer.report();
+      bf2_timer.report();
+      bf3_timer.report();
+      //bf3a_timer.report();
+      bf4_timer.report();
+      //bf5_timer.report();
+      //bf6_timer.report();
+      //bf7_timer.report();
+      //bf7a_timer.report();
+      //bf8_timer.report();
+    }
     tfidf_time += tfidf_timer.report(false);
     bf_time += bf_timer.report(false);
   }
 
-  LOG.info("TFIDF time: %lf \n", tfidf_time / num_queries);
-  LOG.info("TFIDF with Blind Feedback time: %lf \n", bf_time / num_queries);
+  LOG.info("TFIDF time: %lf \n", tfidf_time / queries.size());
+  LOG.info("TFIDF with Blind Feedback time: %lf \n", bf_time / queries.size());
 }
 
 
@@ -168,42 +265,26 @@ int main(int argc, char** argv)
 {
   Env::init();
 
+  //LOG.set_log_level(LogLevel::DEBUG);
+
   /* Print usage */
   if (argc < 8)
   {
-    LOG.info("Usage: %s <path> <num_docs> <num_terms> <k> <r (0: no blind feedback)> "
-                 "<num_queries> <num_terms_per_query (0: use following terms)> "
-                 "[<term_id>+ (none: select random terms)] \n", argv[0]);
+    LOG.error("Usage: %s <graph_filepath> <labels_filepath> <num_docs> <num_terms> "
+              "<queries_filepath> <k> <r (0: no blind feedback)> \n", argv[0]);
     Env::exit(1);
   }
 
   /* Initialize parameters */
-  std::string filepath = argv[1];
-  BP::nd = (vid_t) std::atol(argv[2]);
-  BP::nt = (vid_t) std::atol(argv[3]);
-  uint32_t k = std::atoi(argv[4]);
-  uint32_t r = std::atoi(argv[5]);
-  uint32_t num_queries = std::atoi(argv[6]);
-  uint32_t num_query_terms = std::atoi(argv[7]);
+  string filepath_graph = argv[1];
+  string filepath_labels = argv[2];
+  BP::nd = (vid_t) atoi(argv[3]);
+  BP::nt = (vid_t) atoi(argv[4]);
+  string filepath_queries = argv[5];
+  uint32_t k = atoi(argv[6]);
+  uint32_t r = atoi(argv[7]);
 
-  std::set<vid_t> query_terms;
-
-  if (num_query_terms == 0)  // use query terms from input
-  {
-    assert(argc > 8);
-    for (auto i = 8; i < argc; i++)
-    {
-      uint32_t term_id = (vid_t) std::atol(argv[i]);
-      assert(term_id <= BP::nt);
-      query_terms.insert(term_id + BP::nd);  // shift +nd for bipartite matrix
-    }
-    run<false>(filepath, BP::nd, BP::nt, k, r, num_queries, num_query_terms, query_terms);
-  }
-  else  // randomly generate query terms
-  {
-    srand(0);
-    run<true>(filepath, BP::nd, BP::nt, k, r, num_queries, num_query_terms, query_terms);
-  }
+  run(filepath_graph, filepath_labels, filepath_queries, k, r);
 
   Env::finalize();
   return 0;
