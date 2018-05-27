@@ -9,8 +9,8 @@
 
 
 template <class W, class M, class A, class S>
-VertexProgram<W, M, A, S>::VertexProgram(const Graph<W>* G, bool stationary)
-    : G(G), owns_vertices(true), stationary(stationary)
+VertexProgram<W, M, A, S>::VertexProgram(const Graph<W> *G, bool stationary)
+    : stationary(stationary), G(G), owns_vertices(true)
 {
   v = new VectorV(G->get_matrix());
   x = new VectorX(G->get_matrix());

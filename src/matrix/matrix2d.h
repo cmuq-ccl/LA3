@@ -32,11 +32,11 @@ protected:
   /* Matrix Dimensions in terms of entries and tiles */
   const uint32_t nrows, ncols;
 
-  const Partitioning partitioning;
-
   const uint32_t ntiles, nrowgrps, ncolgrps;
 
   const uint32_t tile_height, tile_width;
+
+  const Partitioning partitioning;
 
   /*
    * 2D vector in column-major order.

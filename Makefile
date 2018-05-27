@@ -29,7 +29,7 @@ gs = graph_simulation
 # Compiler Flags:
 # For debugging, enable DEBUG and disable OPTIMIZE
 DNWARN = -Wno-comment -Wno-literal-suffix -Wno-sign-compare \
-         -Wno-unused-function -Wno-unused-variable -Wno-reorder
+         -Wno-unused-function -Wno-unused-variable -Wreorder
 THREADED = -fopenmp -D_GLIBCXX_PARALLEL
 #DEBUG = -g -fsanitize=undefined,address -lasan -lubsan
 OPTIMIZE = -DNDEBUG -O3 -flto -fwhole-program -march=native

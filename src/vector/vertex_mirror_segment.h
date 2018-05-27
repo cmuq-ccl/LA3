@@ -37,9 +37,8 @@ public:
 
   VertexMirrorSegment(const RowGrp* rowgrp, std::vector<MPI_Request>& recv_requests,
                       std::vector<void*>& recv_blobs, uint32_t& num_outstanding, bool sink)
-      : Array(sink ? rowgrp->globally_sink->size() : rowgrp->globally_regular->size()),
-        recv_requests(&recv_requests), recv_blobs(&recv_blobs), num_outstanding(&num_outstanding),
-        sink(sink)
+      : Array(sink ? rowgrp->globally_sink->size() : rowgrp->globally_regular->size()), sink(sink),
+        recv_requests(&recv_requests), recv_blobs(&recv_blobs), num_outstanding(&num_outstanding)
   {
     ith = rowgrp->ith;
     rg = rowgrp->rg;

@@ -37,11 +37,6 @@ class VertexProgram
 
 public:
 
-  //using W = Weight;
-  //using M = Msg;
-  //using A = Accum;
-  //using S = State;
-
   /* Constructors / Destructors */
 
   /** The graph (matrix) must already be loaded. **/
