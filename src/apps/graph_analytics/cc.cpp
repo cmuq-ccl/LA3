@@ -24,7 +24,6 @@ void run(std::string filepath, vid_t nvertices)
   vp.display();
   timer.report();
 
-  /* For correctness checking */
   long checksum = vp.reduce<long>(
       [&](uint32_t idx, const CcState& s) -> long { return s.label; },  // mapper
       [&](long& a, const long& b) { a += b; });  // reducer

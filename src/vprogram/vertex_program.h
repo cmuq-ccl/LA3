@@ -108,7 +108,7 @@ public:
    **/
   virtual A gather(const Edge<W>& edge, const M& msg, const S& state)
   {
-    //LOG.info("VertexProgram::gather2: Not implemented! \n");
+    // LOG.info("VertexProgram::gather2: Not implemented! \n");
     gather_depends_on_state = false;  // for internal use (detects override)
     return A();
   }
@@ -119,7 +119,7 @@ public:
    **/
   virtual void combine(const A& y1, A& y2)
   {
-    //LOG.info("VertexProgram::combine: Not implemented! \n");
+    // LOG.info("VertexProgram::combine: Not implemented! \n");
   }
 
   /**
@@ -140,7 +140,7 @@ public:
    **/
   virtual bool apply(const A& y, S& state, uint32_t iter)
   {
-    //LOG.info("VertexProgram::apply2: Not implemented! \n");
+    // LOG.info("VertexProgram::apply2: Not implemented! \n");
     apply_depends_on_iter = false;  // for internal use (detects override)
     return false;
   }
@@ -380,6 +380,6 @@ struct Edge<Empty>
 /* Implementation */
 #include "vprogram/vertex_program.hpp"
 #include "vprogram/vertex_program_execute.hpp"
-
+#include "vprogram/vertex_program_execute_details.hpp"
 
 #endif

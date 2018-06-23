@@ -27,7 +27,7 @@ void run(std::string filepath, vid_t nvertices)
   DistTimer gn_timer("P1: Get Neighbors");
   vp_gn->execute(1);
   gn_timer.stop();
-  //vp_gn->display();
+  // vp_gn->display();
   delete G;  // free in-neighbors graph
 
   /* Count triangles (initialize using in-neighbors) */
@@ -40,7 +40,7 @@ void run(std::string filepath, vid_t nvertices)
   ct_timer.stop();
   tc_timer.stop();
 
-  //vp_ct.display();
+  // vp_ct.display();
   gn_timer.report();
   ct_timer.report();
   tc_timer.report();
