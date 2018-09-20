@@ -33,7 +33,7 @@ Examples:
     - `make run app=pr np=4 args="data/graph_analytics/g1_8_8_13.bin 8"`
   - Run Pagerank on test graph G1 (8 vertices) (20 iterations):
     - `make run app=pr np=4 args="data/graph_analytics/g1_8_8_13.bin 8 20"`
-  - Run SSSP on test graph G1 (8 vertices) (root vertex id = 5):
+  - Run SSSP on (weighted) test graph G1 (8 vertices) (root vertex id = 5):
     - `make run app=sssp np=4 args="data/graph_analytics/g1_8_8_13.w.bin 8 5"`
   - Run BFS on test graph G1 (8 vertices) (root vertex id = 5):
     - `make run app=bfs np=4 args="data/graph_analytics/g1_8_8_13.bin 8 5"`
