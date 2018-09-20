@@ -33,6 +33,8 @@ struct GsState : State
 
   string to_string() const
   {
+    if (not is_matched()) return "";
+    else return std::to_string(vid);
     string s = "{ ";
     s = s + label + ": " + std::to_string(vid);
     s = s + ", res: ";
@@ -45,6 +47,15 @@ struct GsState : State
     s = s + ", deps: " + std::to_string(deps);
     s = s + " }";
     return s;
+  }
+
+  bool is_matched() const
+  {
+    // If even one query node is matched ('1') or undecided ('U'), then the vertex was matched.
+    // That is, if none of the query nodes matched (all '0'), then the vertex was mismatched.
+    for (int i = 0; i < res.size() - 1; i++)  // check result against each query node
+      if (res[i] != '0') return true;  // matched
+    return false;  // mismatched
   }
 };
 
@@ -89,7 +100,7 @@ public:
 
   bool init(uint32_t vid, GsState& s)
   {
-    s.res.resize(q->size);
+    s.res.resize(q->size + 1);  // +1 for '\0'
     s.mm.resize(q->size);
     s.pm.resize(q->size);
 

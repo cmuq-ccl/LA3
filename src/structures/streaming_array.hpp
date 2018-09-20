@@ -17,7 +17,7 @@ uint32_t StreamingArray<Value, ActivitySet>::serialize_into(void*& blob)
   Value val;
   uint32_t idx, x = 0;
 
-  uint32_t activity_nbytes = activity->serialize_into<false /* NOT destructive! */>(blob);
+  uint32_t activity_nbytes = activity->template serialize_into<false>(blob);  // Not destructive.
   uint32_t values_nbytes = nactive * sizeof(Value);
 
   Value* values = blob_values_offset(blob, activity_nbytes, values_nbytes);
@@ -89,8 +89,8 @@ uint32_t StreamingArray<Value, ActivitySet>::serialize_into_dynamic(void*& blob)
   {
     blob = new char[activity_nbytes];
 
-    // Serialize activity into blob.
-    uint32_t activity_nbytes_ = activity->serialize_into<false /* NOT destructive! */>(blob);
+    // Serialize activity into blob (not destructive).
+    uint32_t activity_nbytes_ = activity->template serialize_into<false>(blob);
     assert(activity_nbytes == activity_nbytes_);
 
     rewind();
@@ -98,9 +98,9 @@ uint32_t StreamingArray<Value, ActivitySet>::serialize_into_dynamic(void*& blob)
     return activity_nbytes;
   }
 
-  // Serialize activity into temporary blob.
+  // Serialize activity into temporary blob (not destructive).
   char* tmp_blob = new char[activity_nbytes];
-  uint32_t activity_nbytes_ = activity->serialize_into<false /* NOT destructive! */>(tmp_blob);
+  uint32_t activity_nbytes_ = activity->template serialize_into<false>(tmp_blob);
   assert(activity_nbytes == activity_nbytes_);
 
   // Serialize values into bytestrings.

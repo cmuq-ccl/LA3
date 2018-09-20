@@ -38,7 +38,7 @@ class AnnotatedMatrix2D : public DistMatrix2D<Weight, typename Annotation::Tile>
   friend struct AnnotatedMatrix2D_Test;
 
 public:
-  AnnotatedMatrix2D(uint32_t nrows, uint32_t ncols, uint32_t ntiles, Partitioning partitioning);
+  AnnotatedMatrix2D(uint32_t nrows, uint32_t ncols, uint32_t ntiles);
 
 public:
   /* From Annotation. */

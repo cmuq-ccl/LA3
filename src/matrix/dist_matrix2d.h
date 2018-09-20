@@ -21,7 +21,7 @@ public:
    * Relies upon Env::nranks and Env::rank as well as LOG.info() and friends.
    * Requires ntiles to be a multiple Env::nranks _and_ a square value.
    **/
-  DistMatrix2D(uint32_t nrows, uint32_t ncols, uint32_t ntiles, Partitioning partitioning);
+  DistMatrix2D(uint32_t nrows, uint32_t ncols, uint32_t ntiles);
 
   ~DistMatrix2D();
 

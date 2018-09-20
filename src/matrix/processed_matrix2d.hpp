@@ -13,8 +13,8 @@
 
 template <class Weight, class Annotation>
 ProcessedMatrix2D<Weight, Annotation>::ProcessedMatrix2D(
-    uint32_t nrows, uint32_t ncols, uint32_t ntiles, Partitioning partitioning)
-    : Base(nrows, ncols, ntiles, partitioning), already_distributed(false)
+    uint32_t nrows, uint32_t ncols, uint32_t ntiles)
+    : Base(nrows, ncols, ntiles), already_distributed(false)
 {
   assert(tile_width == tile_height);
 

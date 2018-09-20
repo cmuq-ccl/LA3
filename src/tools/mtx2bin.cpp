@@ -2,6 +2,7 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
+#include <cstring>
 
 
 using namespace std;
@@ -9,12 +10,11 @@ using namespace std;
 
 int main(int argc, char* argv[])
 {
-  cout
-      << "Convert graph from Matrix Market (with optional header: n m nnz) "
-      << "pairs (i j) or triples (i j w) "
-      << "to binary (with optional header: uint:n uint:m ulong:nnz) "
-      << "pairs (uint:i uint:j) or triples (uint:i uint:j uint:w). "
-      << endl;
+  cout << "Convert graph from Matrix Market (with optional header: n m nnz) "
+       << "pairs (i j) or triples (i j w) "
+       << "to binary (with optional header: uint:n uint:m ulong:nnz) "
+       << "pairs (uint:i uint:j) or triples (uint:i uint:j uint:w). "
+       << endl;
 
   cout << "Usage: " << argv[0] << " <filepath_in> <filepath_out> "
        << endl << "\t [-hi[o]]    read in first non-comment line as header [and write [o]ut]"
@@ -69,8 +69,8 @@ int main(int argc, char* argv[])
   uint64_t nnz = 0;
   if (header_in)
   {
-    // fin.seekg(-strlen(buffer.data()), ios::cur);
-    // fin >> nnz >> n >> m;
+    fin.seekg(-strlen(buffer.data()), ios::cur);
+    //fin >> nnz >> n >> m;
     fin >> n >> m >> nnz;
     cout << "Header: " << n << " " << m << " " << nnz << endl;
 

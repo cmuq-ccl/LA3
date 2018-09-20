@@ -27,7 +27,7 @@ template <class Weight, class Annotation = CSCAnnotation<Weight>>
 class CSCMatrix2D : public ProcessedMatrix2D<Weight, Annotation>
 {
 public:
-  CSCMatrix2D(uint32_t nrows, uint32_t ncols, uint32_t ntiles, Partitioning partitioning);
+  CSCMatrix2D(uint32_t nrows, uint32_t ncols, uint32_t ntiles);
 
   ~CSCMatrix2D();
 

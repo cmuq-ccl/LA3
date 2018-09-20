@@ -40,21 +40,17 @@ Examples:
   - Run TC on test graph G1 (8 vertices):
     - `make run app=tc np=4 args="data/graph_analytics/g1_8_8_13.bin 8"`
 - Information Retrieval:
-  - Run TF-IDF on test graph G2 (bipartite: 4 docs, 7 terms) without blind feedback:
-    (k=3, 10 random queries, 2 terms per query):
-    - `make ir run app=tfidf np=4 ...`
-      - `args="data/information_retrieval/g2_4_7_10.w.bp.bin 4 7 3 0 10 2"`
-  - Run TF-IDF on test graph G2 (bipartite: 4 docs, 7 terms) with blind feedback:
-    (k=3, r=2, 10 random queries, 2 terms per query):
-    - `make ir run app=tfidf np=4 ...`
-      - `args="data/information_retrieval/g2_4_7_10.w.bp.bin 4 7 3 2 10 2"`
+  - Run BM25 w/ top-k (k=3) on test graph G2 (bipartite: 7 docs, 7 terms, 17 edges):
+    - `make ir run app=bm25 np=4 dd=data/information_retrieval g=g2_7_7_17 ...`
+      - `args="$dd/$g.w.bp.bin $dd/$g.term.labels 7 7 $dd/$g.queries 3"`
+  - Run Language Modeling (LM) w/ top-k (k=3) on test graph G2:
+    - `make ir run app=lm np=4 dd=data/information_retrieval g=g2_7_7_17 ...`
+      - `args="$dd/$g.w.bp.bin $dd/$g.term.labels 7 7 $dd/$g.queries 3"`
 - Graph Simulation:
   - Run Graph Simulation on test graph G3 (13 vertices) and query graph Q1 (4 vertices):
-    - `make gs run app=graphsim np=4 ...` </br>
-      - `args="data/graph_simulation/g3_13_13_20.labels` </br> 
-      - `      data/graph_simulation/g3_13_13_20.bin` </br>
-      - `      data/graph_simulation/q1_4_4_6.labels` </br>
-      - `      data/graph_simulation/q1_4_4_6.mtx"`
+    - `make gs run app=graphsim np=4 ... `
+      - `dd=data/graph_simulation g=g3_13_13_20 q=q1_4_4_6 ...`
+      - `args="$dd/$g.labels $dd/$g.bin $dd/$q.labels $dd/$q.mtx"`
     
 Converting a dataset from Matrix Market format to LA3 binary format:
 - `bin/tools/mtx2bin <filepath_in> <filepath_out> [-hi[o]] [-wi] [-wo{i|d}]`
@@ -66,4 +62,15 @@ Converting a dataset from Matrix Market format to LA3 binary format:
     - `bin/tools/mtx2bin soc-LiveJournal1.txt livejournal.bin`
   - LiveJournal (text pairs to binary triples): 
     - `bin/tools/mtx2bin soc-LiveJournal1.txt livejournal.w.bin -woi`
+    
+Converting a dataset from LA3 binary format to Matrix Market format:
+- `bin/tools/bin2mtx <filepath_in> <filepath_out> [-hi[o]] [-wi] [-wo{i|d}]`
+  - `[-hi[o]] .... read in header [and write [o]ut]`
+  - `[-wi] ....... read in edge weights (must be int)`
+  - `[-wo[r]] .... write out edge weights (int) (by default 1, or rand [1,128] if [r])`
+- Examples:
+  - LiveJournal (binary pairs to text pairs):
+    - `bin/tools/bin2mtx livejournal.bin soc-LiveJournal1.txt`
+  - LiveJournal (binary triples to text triples): 
+    - `bin/tools/mtx2bin soc-LiveJournal1.txt livejournal.w.bin -wi -wo`
     

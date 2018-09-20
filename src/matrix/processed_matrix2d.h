@@ -29,7 +29,7 @@ class ProcessedMatrix2D : public AnnotatedMatrix2D<Weight, Annotation>
   friend struct ProcessedMatrix2D_Test;
 
 public:
-  ProcessedMatrix2D(uint32_t nrows, uint32_t ncols, uint32_t ntiles, Partitioning partitioning);
+  ProcessedMatrix2D(uint32_t nrows, uint32_t ncols, uint32_t ntiles);
 
   ~ProcessedMatrix2D();
 

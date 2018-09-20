@@ -3,6 +3,7 @@
 
 #include <climits>
 #include <type_traits>
+#include <vector>
 #include "utils/env.h"
 #include "matrix/graph.h"
 #include "structures/streaming_array.h"
@@ -11,20 +12,6 @@
 #include "vector/accum_vector.h"
 #include "vector/vertex_vector.h"
 #include "vprogram/types.h"
-
-
-template <class Weight>
-struct Edge
-{
-  const uint32_t src, dst;
-
-  const Weight& weight;
-
-  Edge() : src(0), dst(0), weight(Weight()) {}
-
-  Edge(const uint32_t src, const uint32_t dst, const Weight* weight)
-      : src(src), dst(dst), weight(*weight) {}
-};
 
 
 /**
@@ -44,12 +31,16 @@ public:
 
   /* Constructors / Destructors */
 
-  /** The graph (matrix) must already be loaded. **/
+  /**
+   * The graph (matrix) must already be loaded.
+   * An app is stationary if all vertices stay active during all iterations.
+   **/
   VertexProgram(const Graph<W>* G, bool stationary = false);
 
   /**
    * Borrow graph (matrix) and vertex state vector from another VertexProgram.
    * Use when executing different vertex programs on the same graph (sequentially).
+   * An app is stationary if all vertices stay active during all iterations.
    **/
   template <class M2, class A2>
   VertexProgram(const VertexProgram<W, M2, A2, S>& other, bool stationary = false);
@@ -152,12 +143,6 @@ public:
 
 
   /**
-   * Stationary apps should enable this flag.  Disabled by default.
-   * An app is stationary if all vertices stay active during all iterations.
-   **/
-  bool stationary = false;
-
-  /**
    * Non-LA3-Optimizable apps should disable this flag.
    * LA3's vertex filtering optimizations are enabled by default unless:
    * 1) the input graph is undirected, or
@@ -175,6 +160,7 @@ public:
   /**
    * Execute the vertex program for given number of iterations or until convergence (default).
    **/
+  template <bool disable_mirroring = false>
   void execute(uint32_t max_iters_ = UNTIL_CONVERGENCE);
 
   /*
@@ -186,26 +172,46 @@ public:
 
   /* Vertex State Interface */
 
-  /** Intialize vertex states. **/
+  /** Initialize all vertex states with init(). **/
   void initialize();
 
-  /** Free vertex states. **/
-  void free();
+  /** Initialize left/right/all bipartite vertex states with init(). **/
+  template <bool left, bool right>
+  void initialize_bipartite();
 
   /**
-   * Intialize vertices' states using their corresponding states from another vertex program
+   * Initialize vertex states for the given set of vertices (only) with init().
+   * If vids is empty, then initialize all vertex states with init().
+   **/
+  void initialize(const std::vector<uint32_t>& vids);
+
+  /**
+   * Initialize vertices' states using their corresponding states from another vertex program
    * defined on the same graph but reversed.
    **/
   template <class W2, class M2, class A2, class S2>
   void initialize(const VertexProgram<W2, M2, A2, S2>& other);
 
+  /** Free vertex states. **/
+  void free();
+
+  template<bool values_only = false>
   void display(uint32_t nvertices = 30);
 
   void reset_activity();
 
+  void activate_all();
+
   /* TODO: We only support trivially-serializable types for reduce(). */
   template <class Value, class Mapper, class Reducer>
   Value reduce(Mapper map, Reducer reduce, bool active_only = false);
+
+  /*
+   * Gather the (mapped) states of vertices at the master.
+   */
+  /* TODO: We only support trivially-serializable types for gather(). */
+  /*template <class V, class Mapper>
+  void gather(std::vector<V>& values, Mapper map);*/
 
   /* TODO: We only support trivially-serializable types for topk(). */
   template <class I, class V, class Mapper, class Comparator>
@@ -249,51 +255,61 @@ private:
 
 
   /*
+   * Specialized implementations of initialize()
+   */
+
+  /**
+   * Initialize left/right/all bipartite vertex states with init()
+   * for a directed bipartite graph.
+   **/
+  template <bool left, bool right>
+  void initialize_bipartite_directed();
+
+  /**
+   * Initialize left/right/all bipartite vertex states with init()
+   * for an undirected bipartite graph.
+   **/
+  template <bool left, bool right>
+  void initialize_bipartite_undirected();
+
+
+  /*
    * Specialized implementations of execute() with/without
-   * vertex mirroring and sinks-factored-out optimizations.
+   * vertex mirroring and sources/sinks-factored-out optimizations.
    */
 
   /**
    * Execute the vertex program for given number of iterations or (by default) until convergence.
    **/
   template <bool mirroring>
-  void execute_2d(uint32_t max_iters);
+  void execute_(uint32_t max_iters);
 
   /**
    * Execute the vertex program for given number of iterations or (by default) until convergence.
-   * Using pseudo-1D col-wise partitioning (see matrix/graph.h).
+   * Not optimized with computation filtering: sources and sinks processed in every iteration.
    **/
   template <bool mirroring>
-  void execute_1d_col(uint32_t max_iters);
+  void execute_non_opt(uint32_t max_iters);
 
   /**
-   * Execute the vertex program for given number of iterations or (by default) until convergence.
+   * Execute the vertex program optimized for one iteration only.
    **/
   template <bool mirroring>
-  void execute_2d_non_opt(uint32_t max_iters);
+  void execute_single();
 
   /**
-   * Execute the vertex program for given number of iterations or (by default) until convergence.
-   * Using pseudo-1D col-wise partitioning (see matrix/graph.h).
+   * Execute the vertex program optimized for one iteration only.
+   * Bidirectional: no sources or sinks.
    **/
   template <bool mirroring>
-  void execute_1d_col_non_opt(uint32_t max_iters);
-
-  /**
-   * Execute the vertex program for one iteration only (optimized).
-   **/
-  template <bool mirroring>
-  void execute_single_2d();
-
-  /**
-   * Execute the vertex program for one iteration only (optimized).
-   * Using pseudo-1D col-wise partitioning (see matrix/graph.h).
-   **/
-  template <bool mirroring>
-  void execute_single_1d_col();
-
+  void execute_single_undirected();
 
   /* Optimizations */
+
+  /**
+   * An app is stationary if all vertices stay active during all iterations.
+   **/
+  bool stationary = false;
 
   /**
    * Does gather() depend on the vertex state?
@@ -309,7 +325,6 @@ private:
    **/
   bool apply_depends_on_iter = false;
 
-
   /**
    * Has initialize() already been called, either explicitly or implicitly by the first call
    * to execute()?
@@ -323,14 +338,20 @@ private:
 
   void scatter_source_messages();
 
-  template <bool source, Partitioning partitioning>
+  template <bool sink>
+  void bcast_active_states_to_mirrors();
+
+  template <bool source>
   StreamingArray<M>& receive_jth_xseg(uint32_t jth);
 
-  template <bool sink, Partitioning partitioning, bool mirroring>
+  template <bool sink, bool mirroring>
   void process_messages(uint32_t iter = 0);
 
-  template <bool sink, Partitioning partitioning, bool mirroring>
+  template <bool sink, bool mirroring>
   bool process_ready_messages(const std::vector<int32_t>& ready, uint32_t iter);
+
+  template <bool sink, bool mirroring>
+  bool process_ready_messages_with_states(const std::vector<int32_t>& ready, uint32_t iter);
 
   template <bool gather_with_state>
   void SpMV(const CSC<W>& csc,           /** A_ith_jth **/

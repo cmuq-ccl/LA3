@@ -61,21 +61,23 @@ public:
   void* isend(int32_t rank, int32_t tag, MPI_Comm comm, MPI_Request* request)
   {
     void* blob = nullptr;
+    uint32_t nbytes;
 
     // "IF" this is determined statically, the compiler should optimize this branch away.
     if (std::is_base_of<Serializable, typename Array::Type>::value)
     {
       // We will create the blob dynamically during serialization (passing ptr by reference).
-      uint32_t nbytes = Array::template serialize_into<destructive>(blob);
+      nbytes = Array::template serialize_into<destructive>(blob);
       MPI_Isend(blob, nbytes, MPI_BYTE, rank, tag, comm, request);
     }
     else
     {
       blob = Array::new_blob(blob_nbytes_tight());
-      uint32_t nbytes = Array::template serialize_into<destructive>(blob);
+      nbytes = Array::template serialize_into<destructive>(blob);
       MPI_Isend(blob, nbytes, MPI_BYTE, rank, tag, comm, request);
     }
 
+    if(rank != Env::rank) Env::nbytes_sent += nbytes;
     return blob;
   }
 

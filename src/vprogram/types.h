@@ -26,4 +26,18 @@ struct Accum : Object { using Object::Object; };
 struct State : Object { using Object::Object; };
 
 
+template <class Weight>
+struct Edge
+{
+  const uint32_t src, dst;
+
+  const Weight& weight;
+
+  Edge() : src(0), dst(0), weight(Weight()) {}
+
+  Edge(const uint32_t src, const uint32_t dst, const Weight* weight)
+      : src(src), dst(dst), weight(*weight) {}
+};
+
+
 #endif

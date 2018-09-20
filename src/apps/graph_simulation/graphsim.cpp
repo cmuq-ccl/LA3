@@ -70,20 +70,15 @@ void run(string& dgl_filepath, string& dgm_filepath, vid_t nvertices,
   DistTimer gs_timer("GraphSim Execution");
   vp.execute();  // until convergence
   gs_timer.stop();
-  //vp.display();
+  vp.display(nvertices);
 
   /* For correctness checking */
   vid_t nmatches = vp.reduce<vid_t>(
-      [&](uint32_t idx, const GsState& s) -> vid_t  // mapper
-        {
-          // If even one query node is matched '1' or undecided 'U', then the vertex was matched.
-          // That is, if none of the query nodes matched, then the vertex was mismatched.
-          for (auto r : s.res)  // check result against each query node
-            if (r != '0') return 1;  // matched
-          return 0;  // mismatched
-        },
+      [&](uint32_t idx, const GsState& s) -> vid_t { return s.is_matched() ? 1 : 0; },  // mapper
       [&](vid_t& a, const vid_t& b) { a += b; });  // reducer
-  LOG.info("Matches = %u \n", nmatches);
+  LOG.info("Num matches = %u \n", nmatches);
+
+  LOG.info("Bytes sent: %lu \n", Env::get_global_comm_nbytes());
 
   init_timer.report();
   gs_timer.report();
@@ -112,7 +107,12 @@ int main(int argc, char* argv[])
   string qgl_filepath = argv[4];
   string qgm_filepath = argv[5];
 
+  DistTimer timer("Overall");
+
   run(dgl_filepath, dgm_filepath, nvertices, qgl_filepath, qgm_filepath);
+
+  timer.stop();
+  timer.report();
 
   Env::finalize();
   return 0;

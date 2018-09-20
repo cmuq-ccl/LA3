@@ -7,15 +7,6 @@
 #include "utils/log.h"
 
 
-/** Which partitioning strategy to use. **/
-enum Partitioning
-{
-  _1D_ROW,  /** Row-wise 1D (1 rank per tile-row) **/  // (not implemented)
-  _1D_COL,  /** Column-wise 1D (1 rank per tile-column) **/
-  _2D       /** 2D (default) **/
-};
-
-
 /*
  * Gemini-Inspired Edge/Triple Type, via an explicit specialization for the
  * unweighted pair case.
@@ -92,6 +83,12 @@ struct Triple<Empty>
 }; // __attribute__((packed));
 
 using Pair = Triple<Empty>;
+
+
+enum VertexType
+{
+  Regular, Sink, Source, Isolated
+};
 
 
 struct Serializable

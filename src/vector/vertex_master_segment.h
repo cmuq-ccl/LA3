@@ -111,10 +111,11 @@ public:
     out_snk = nullptr;
   }
 
+  template <bool sink>
   void allocate_mirrors()
   {
-    out_reg = new Out(rg_reg_size);
-    out_snk = new Out(rg_sink_size);
+    if (sink) out_snk = new Out(rg_sink_size);
+    else out_reg = new Out(rg_reg_size);
   }
 
   uint32_t internal_from_original(uint32_t idx)
@@ -124,12 +125,19 @@ public:
     return (*locator)[idx - offset];
   }
 
-  uint32_t locate(uint32_t idx)
+  uint32_t original_from_internal(uint32_t idx)
   {
     assert(idx >= offset);
     assert(idx - offset < Array::size());
     assert((*locator)[original_from_internal_map[idx - offset]] == idx - offset);
     return original_from_internal_map[idx - offset];
+  }
+
+  uint32_t get_vertex_type(uint32_t idx)  // from original idx
+  {
+    assert(idx >= offset);
+    assert(idx - offset < Array::size());
+    return locator->get_vertex_type(idx - offset);
   }
 
   /* Post process previous iteration's requests and blobs, if any. */

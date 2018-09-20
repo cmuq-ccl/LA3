@@ -10,39 +10,20 @@
 
 
 template <class Weight, class Tile>
-DistMatrix2D<Weight, Tile>::DistMatrix2D(uint32_t nrows, uint32_t ncols, uint32_t ntiles,
-                                         Partitioning partitioning)
-    : Base(nrows, ncols, ntiles, partitioning),
+DistMatrix2D<Weight, Tile>::DistMatrix2D(uint32_t nrows, uint32_t ncols, uint32_t ntiles)
+    : Base(nrows, ncols, ntiles),
       nranks(Env::nranks), rank(Env::rank), rank_ntiles(ntiles / nranks)
 {
   /* Number of tiles must be a multiple of the number of ranks. */
   assert(rank_ntiles * nranks == ntiles);
 
-  if (partitioning == Partitioning::_1D_COL)
-  {
-    /* Number of ranks sharing each rowgroup and colgroup. */
-    rowgrp_nranks = nranks;
-    colgrp_nranks = 1;
-    assert(rowgrp_nranks * colgrp_nranks == nranks);
-    /* Number of rowgroups and colgroups per rank. */
-    rank_nrowgrps = nrowgrps;
-    rank_ncolgrps = 1;
-    assert(rank_nrowgrps * rank_ncolgrps == rank_ntiles);
-  }
-  else if (partitioning == Partitioning::_1D_ROW)
-  {
-    LOG.fatal("1D_ROW partitioning Not implemented! \n");
-  }
-  else if (partitioning == Partitioning::_2D)
-  {
-    /* Number of ranks sharing each rowgroup and colgroup. */
-    integer_factorize(nranks, rowgrp_nranks, colgrp_nranks);
-    assert(rowgrp_nranks * colgrp_nranks == nranks);
-    /* Number of rowgroups and colgroups per rank. */
-    rank_nrowgrps = nrowgrps / colgrp_nranks;
-    rank_ncolgrps = ncolgrps / rowgrp_nranks;
-    assert(rank_nrowgrps * rank_ncolgrps == rank_ntiles);
-  }
+  /* Number of ranks sharing each rowgroup and colgroup. */
+  integer_factorize(nranks, rowgrp_nranks, colgrp_nranks);
+  assert(rowgrp_nranks * colgrp_nranks == nranks);
+  /* Number of rowgroups and colgroups per rank. */
+  rank_nrowgrps = nrowgrps / colgrp_nranks;
+  rank_ncolgrps = ncolgrps / rowgrp_nranks;
+  assert(rank_nrowgrps * rank_ncolgrps == rank_ntiles);
 
   /* A large MPI type to support buffers larger than INT_MAX. */
   MPI_Type_contiguous(many_triples_size * sizeof(Triple<Weight>), MPI_BYTE, &MANY_TRIPLES);
@@ -104,22 +85,9 @@ void DistMatrix2D<Weight, Tile>::assign_tiles()
       tile.rg = rg;
       tile.cg = cg;
 
-      if (this->partitioning == Partitioning::_1D_COL)
-      {
-        tile.rank    = cg; //(cg % rowgrp_nranks) * colgrp_nranks + (rg % colgrp_nranks);
-        tile.ith     = rg / colgrp_nranks;
-        tile.jth     = cg / rowgrp_nranks;
-      }
-      else if (this->partitioning == Partitioning::_1D_ROW)
-      {
-        LOG.fatal("1D_ROW partitioning Not implemented! \n");
-      }
-      else if (this->partitioning == Partitioning::_2D)
-      {
-        tile.rank = (cg % rowgrp_nranks) * colgrp_nranks + (rg % colgrp_nranks);
-        tile.ith = rg / colgrp_nranks;
-        tile.jth = cg / rowgrp_nranks;
-      }
+      tile.rank = (cg % rowgrp_nranks) * colgrp_nranks + (rg % colgrp_nranks);
+      tile.ith = rg / colgrp_nranks;
+      tile.jth = cg / rowgrp_nranks;
 
       tile.nth = tile.ith * rank_ncolgrps + tile.jth;
     }
@@ -144,9 +112,9 @@ void DistMatrix2D<Weight, Tile>::print_info()
 {
   /* Print assignment information. */
   LOG.info("#> Assigned the tiles to the %u ranks.\n"
-           "#> Each rank has been assigned %u local tiles across %u rowgroups and %u colgroups.\n"
-           "#> Each rowgroup is divided among %u ranks.\n"
-           "#> Each colgroup is divided among %u ranks.\n", nranks, rank_ntiles, rank_nrowgrps,
+               "#> Each rank has been assigned %u local tiles across %u rowgroups and %u colgroups.\n"
+               "#> Each rowgroup is divided among %u ranks.\n"
+               "#> Each colgroup is divided among %u ranks.\n", nranks, rank_ntiles, rank_nrowgrps,
            rank_ncolgrps, rowgrp_nranks, colgrp_nranks);
 
   /* Print a 2D grid of tiles, each annotated with the owner's rank. */
@@ -233,6 +201,7 @@ void DistMatrix2D<Weight, Tile>::distribute()
     /* Send the triples with many_triples_size padding. */
     MPI_Isend(outbox.data(), outbox_bound / many_triples_size, MANY_TRIPLES, r, 1, Env::MPI_WORLD,
               &request);
+    Env::nbytes_sent += outbox_bound * many_triples_size * sizeof(Triple<Weight>);
 
     outreqs.push_back(request);
   }

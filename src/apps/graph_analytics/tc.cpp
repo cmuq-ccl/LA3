@@ -56,6 +56,8 @@ int main(int argc, char* argv[])
 {
   Env::init();
 
+  //LOG.set_log_level(LogLevel::DEBUG);
+
   /* Print usage. */
   if (argc < 3)
   {

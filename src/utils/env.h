@@ -1,6 +1,7 @@
 #ifndef ENV_H
 #define ENV_H
 
+#include <atomic>
 #include <mpi.h>
 #include "utils/enum.h"
 
@@ -28,6 +29,8 @@ public:
 
   static MPI_Comm MPI_WORLD;
 
+  static std::atomic_size_t nbytes_sent;
+
   static void init(RankOrder order = RankOrder::FIXED_SHUFFLE);
 
   static void finalize();
@@ -37,6 +40,8 @@ public:
   static void barrier();  // global barrier
 
   static double now();  // timestamp
+
+  static size_t get_global_comm_nbytes();
 
 private:
   static void shuffle_ranks(RankOrder order);

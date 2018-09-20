@@ -30,6 +30,18 @@ void run(std::string filepath, vid_t nvertices, bool out_degree = false)
   else
     LOG.info("In-Degrees: \n");
   vp.display();
+
+  constexpr int k = 3;
+  using iv_t = std::pair<vid_t, vid_t>;
+  std::vector<iv_t> topk;
+  vp.topk<vid_t, vid_t>(k, topk,
+                        [&](vid_t vid, const DegState& s) { return s.degree; },  // mapper
+                        [&](const iv_t& a, const iv_t& b) { return a.second > b.second; });  // comparator
+
+  LOG.info("Top-%i: \n", k);
+  for(auto const& iv : topk)
+    LOG.info("idx %u: degree %u \n", iv.first, iv.second);
+
   timer.report();
 }
 

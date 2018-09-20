@@ -32,13 +32,24 @@ struct Triple
 
 struct StrHash
 {
-  size_t operator()(std::string const& s) const
+  static constexpr size_t h1 = 1125899906842597L;
+  static constexpr size_t h2 = 684259711258999L;
+
+  template <bool reverse = false>
+  static size_t hash(std::string const& s, size_t h)
   {
-    size_t result = 2166136261U;
-    for (auto iter = s.begin(); iter != s.end(); ++iter)
-      result = 127 * result + static_cast<unsigned char>(*iter);
-    return result;
+    const char* str = s.data();
+    int len = s.size();
+    for (int i = 0; i < len; i++)
+      h = 31 * h + str[i];
+    if (reverse)
+      for (int i = len - 1; i >= 0; i--)
+        h = 31 * h + str[i];
+    return h;
   }
+
+  static size_t hash1(std::string const& s) { return hash(s, h1); }
+  static size_t hash2(std::string const& s) { return hash<true>(s, h2); }
 };
 
 
@@ -54,30 +65,42 @@ int main(int argc, char* argv[])
   /* Step 7: Write (term_str, term_id) mappings to term_id_map file. */
 
 
-  mpi::environment env(argc, argv);
+  int mpi_threading;
+  MPI_Init_thread(0, nullptr, MPI_THREAD_MULTIPLE, &mpi_threading);
+  //mpi::environment env(argc, argv);
   mpi::communicator world;
 
   int rank = world.rank();
+  int nranks = world.size();
 
   constexpr int NPARTS_IN = 20;
   constexpr int NPARTS_OUT = 40;
 
   LOG = "[" + to_string(rank) + "]  ";
 
-  string dir = "/datasets/suwaileh/clueweb12/b/la3";
+  string dir = "/datasets/suwaileh/clueweb12/la3";
+
+
+  if (nranks != NPARTS_OUT)
+  {
+    if (rank == 0) cout << LOG << "nranks must be " << NPARTS_OUT << endl;
+    exit(1);
+  }
 
 
   /* Step 1: Read doc_id offsets */
 
-  if (rank == 0)
-    cout << LOG << "Reading doc_id counts" << endl;
+  if (rank == 0) cout << LOG << "Reading doc_id counts" << endl;
 
   vid_t doc_id_counts[NPARTS_IN] = {0};
   vid_t doc_id_offsets[NPARTS_IN] = {0};
   ifstream fin_doc_id_counts(dir + "/doc-id-map/counts");
   assert(fin_doc_id_counts.good());
   for (int i = 0; i < NPARTS_IN; i++)
+  {
     fin_doc_id_counts >> doc_id_counts[i];
+    if (rank == 0) cout << LOG << doc_id_counts[i] << endl;
+  }
   fin_doc_id_counts.close();
   for (int i = 1; i < NPARTS_IN; i++)
     doc_id_offsets[i] = doc_id_counts[i-1] + doc_id_offsets[i-1];
@@ -87,15 +110,14 @@ int main(int argc, char* argv[])
   /*         Step 3: Map each edge by hashing on term_str -> (doc_id, tf). */
   /*         Until all edges consumed. */
 
-  if (rank == 0)
-    cout << LOG << "Reading (doc_id, term_str, tf) edges from input graph file" << endl;
+  if (rank == 0) cout << LOG << "Reading (doc_id, term_str, tf) edges from input graph file" << endl;
 
   // Input file: each file is read by two ranks; each of these two ranks reads half the file.
-
-  ifstream fin_graph(dir + "/graph/" + (rank/2 < 10 ? "0" : "") + to_string(rank/2));
+  string fname_graph = dir + "/graph/" + (rank/2 < 10 ? "0" : "") + to_string(rank/2);
+  ifstream fin_graph(fname_graph);
   if (not fin_graph.good())
   {
-    cout << LOG << "Could not read input graph file " << rank / 2 << endl;
+    cout << LOG << "Could not read input graph file " << fname_graph << endl;
     exit(-1);
   }
 
@@ -115,7 +137,7 @@ int main(int argc, char* argv[])
 
   unordered_map<string, vid_t>* terms_and_counts[NPARTS_OUT];
 
-  for (int i = 0; i < NPARTS_OUT; i++)  // Initalize
+  for (int i = 0; i < NPARTS_OUT; i++)  // Initialize
     terms_and_counts[i] = new unordered_map<string, vid_t>();
 
   while (not fin_graph.eof())
@@ -131,10 +153,9 @@ int main(int argc, char* argv[])
     if (not fin_graph.good() or fin_graph.eof())
       break;
 
-    StrHash str_hash;
-    size_t h = str_hash(term_str);
+    size_t h1 = StrHash::hash1(term_str);
 
-    (*terms_and_counts[h % NPARTS_OUT])[term_str]++;
+    (*terms_and_counts[h1 % NPARTS_OUT])[term_str]++;
 
     if (rank % 2 == 0 and fin_graph.tellg() >= mid_offset)
       break;
@@ -155,20 +176,22 @@ int main(int argc, char* argv[])
   for (int i = 0; i < NPARTS_OUT; i++)
     flat_terms[i] = new vector<string>();
 
+  #pragma omp parallel for schedule(dynamic)
   for (int i = 0; i < NPARTS_OUT; i++)
   {
     flat_terms[i]->reserve(terms_and_counts[i]->size());
     for (auto term : *terms_and_counts[i])
     {
       flat_terms[i]->push_back(term.first);
-      StrHash str_hash;
-      size_t h = str_hash(term.first);
-      (*term_occurences[i])[h].reserve(term.second);
+      size_t h2 = StrHash::hash2(term.first);
+      (*term_occurences[i])[h2].reserve(term.second);
     }
   }
 
   if (rank == 0) cout << LOG << "Starting second pass" << endl;
 
+  fin_graph.close();
+  fin_graph.open(fname_graph);
   fin_graph.seekg(rank % 2 == 0 ? 0 : mid_offset);  // Rewind
 
   while (not fin_graph.eof())
@@ -186,10 +209,10 @@ int main(int argc, char* argv[])
 
     doc_id_tf.first += doc_id_offsets[rank/2];
 
-    StrHash str_hash;
-    size_t h = str_hash(term_str);
+    size_t h1 = StrHash::hash1(term_str);
+    size_t h2 = StrHash::hash2(term_str);
 
-    (*term_occurences[h % NPARTS_OUT])[h].push_back(doc_id_tf);
+    (*term_occurences[h1 % NPARTS_OUT])[h2].push_back(doc_id_tf);
 
     if (rank % 2 == 0 and fin_graph.tellg() >= mid_offset)
       break;
@@ -200,8 +223,7 @@ int main(int argc, char* argv[])
 
   /* Step 4: Send mapped edges to (and receive from) respective term reducers. */
 
-  if (rank == 0)
-    cout << LOG << "Mapping edges to terms and reducing terms" << endl;
+  if (rank == 0) cout << LOG << "Mapping edges to terms and reducing terms" << endl;
 
   // Convert each term-occurences map {term_hash -> [doc_id_tf, ...]} (except own)
   // into term-occurences vector [pair<term_hash, [doc_id_tf, ...]>, ...].
@@ -211,13 +233,14 @@ int main(int argc, char* argv[])
   for (int i = 0; i < NPARTS_OUT; i++)  // Initialize
     flat_term_occurences[i] = new vector<pair<size_t, vector<pair<vid_t, ew_t>>>>();
 
+  #pragma omp parallel for schedule(dynamic)
   for (int i = 0; i < NPARTS_OUT; i++)
   {
     if (i != rank)
     {
       flat_term_occurences[i]->reserve(term_occurences[i]->size());
-      for (auto term : *term_occurences[i])
-        flat_term_occurences[i]->push_back(term);
+      for (auto term_occs : *term_occurences[i])
+        flat_term_occurences[i]->push_back(term_occs);
       term_occurences[i]->clear();
       delete term_occurences[i];
     }
@@ -258,12 +281,12 @@ int main(int argc, char* argv[])
 
       auto flat_term_occurences_i = new vector<pair<size_t, vector<pair<vid_t, ew_t>>>>();
       world.recv(i, i * 200 + rank, *flat_term_occurences_i);
-      for (auto term : *flat_term_occurences_i)
+      for (auto term_occs : *flat_term_occurences_i)
       {
-        (*term_occurences[rank])[term.first].reserve(term.second.size()
-            + (*term_occurences[rank])[term.first].size());
-        for (auto doc_id_tf : term.second)
-          (*term_occurences[rank])[term.first].push_back(doc_id_tf);
+        (*term_occurences[rank])[term_occs.first].reserve(term_occs.second.size()
+            + (*term_occurences[rank])[term_occs.first].size());
+        for (auto doc_id_tf : term_occs.second)
+          (*term_occurences[rank])[term_occs.first].push_back(doc_id_tf);
       }
       flat_term_occurences_i->clear();
       delete flat_term_occurences_i;
@@ -273,8 +296,7 @@ int main(int argc, char* argv[])
 
   /* Step 5: Calculate term_id offsets. */
 
-  if (rank == 0)
-    cout << LOG << "Calculating term_id offsets" << endl;
+  if (rank == 0) cout << LOG << "Calculating term_id offsets" << endl;
 
   vid_t term_id_counts[NPARTS_OUT] = {0};
   vid_t term_id_offsets[NPARTS_OUT] = {0};
@@ -286,19 +308,20 @@ int main(int argc, char* argv[])
   /* Step 6: Write edges (doc_id, term_id, tf) to graph file. */
   /* Step 7: Write (term_str, term_id) mappings to term_id_map file. */
 
-  if (rank == 0)
-    cout << LOG << "Writing (doc_id, term_id, tf) edges and "
-                << "(term_str, term_id) mappings" << endl;
+  if (rank == 0) cout << LOG << "Writing (doc_id, term_id, tf) edges and "
+                             << "(term_str, term_id) mappings" << endl;
 
   // Output files
-  ofstream fout_graph(dir + "/bin/clueweb12_catb.w.bin" + to_string(rank), ios::binary);
+  ofstream fout_graph(dir + "/bin/clueweb12_catb" + "_" + to_string(NPARTS_IN) + ".w.bin"
+                      + to_string(rank), ios::binary);
   if (not fout_graph.good())
   {
     cout << LOG << "Error creating graph output file" << endl;
     exit(-1);
   }
 
-  ofstream fout_term_id_map(dir + "/term-id-map/" + (rank < 10 ? "0" : "") + to_string(rank));
+  ofstream fout_term_id_map(dir + "/term-id-map/" + to_string(NPARTS_IN) + "_"
+                            + (rank < 10 ? "0" : "") + to_string(rank));
   if (not fout_term_id_map.good())
   {
     cout << LOG << "Error creating term_id mapping file" << endl;
@@ -309,9 +332,8 @@ int main(int argc, char* argv[])
   for (auto term : *terms_and_counts[rank])
   {
     fout_term_id_map << term.first << " " << term_id << endl;
-    StrHash str_hash;
-    size_t h = str_hash(term.first);
-    for (auto doc_id_tf : (*term_occurences[rank])[h])
+    size_t h2 = StrHash::hash2(term.first);
+    for (auto doc_id_tf : (*term_occurences[rank])[h2])
     {
       Triple e(doc_id_tf.first, term_id, doc_id_tf.second);
       e.write(fout_graph);
@@ -331,8 +353,7 @@ int main(int argc, char* argv[])
   world.barrier();
 
 
-  if (rank == 0)
-    cout << LOG << "Done" << endl;
+  if (rank == 0) cout << LOG << "Done" << endl;
 
   return 0;
 }

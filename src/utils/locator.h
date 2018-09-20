@@ -1,12 +1,13 @@
 /*
  * Locator of Vertex Indices.
  *
- * A re-ordering of vertex indices (row/column) for the local tiles of a rank in a row/col-group.
- * The re-ordering is such that locally "regular" entries come before (i.e., are mapped to smaller
- * indices) than locally "secondary" (aka. sink row _or_ source column) entries, than the rest.
+ * A re-ordering of vertex indices for a local vseg (global dashboard locator) or a local xseg/yseg
+ * (local col/row-group locator) at a rank. The re-ordering is such that locally regular entries
+ * come before (i.e., are mapped to smaller indices) than (locally) sink (row) and/or (locally)
+ * source (column) entries, which come before the remaining (locally) isolated entries.
  *
- * NOTE: We used to save the nregular, nsecondary inside the array to allow communicating the
- *       locator as a single buffer. We don't any more. That said, it may be good as-is.
+ * That is, we map each vertex from its original index to its re-ordered index in a local vseg or
+ * local xseg/yseg (depending on locator type).
  */
 
 #ifndef LOCATOR_H
@@ -37,26 +38,27 @@ public:
     delete[] buffer;
   }
 
+
   uint32_t* array() { return buffer + metasize; }
 
   const uint32_t* array() const { return buffer + metasize; }
 
-  const uint32_t& operator[](uint32_t idx) const
-  {
-    return array()[idx];
-  }
+  const uint32_t& operator[](uint32_t idx) const { return array()[idx]; }
+
+
+  /* Metadata */
 
   uint32_t nregular() const { return buffer[0]; }
 
   uint32_t& nregular() { return buffer[0]; }
 
+  /* For RowGrp/ColGrp locator */
+
   uint32_t nsecondary() const { return buffer[1]; }
 
   uint32_t& nsecondary() { return buffer[1]; }
 
-  uint32_t ntertiary() const { return buffer[2]; }
-
-  uint32_t& ntertiary() { return buffer[2]; }
+  /* For Dashboard locator */
 
   uint32_t nsink() const { return buffer[1]; }
 
@@ -66,27 +68,16 @@ public:
 
   uint32_t& nsource() { return buffer[2]; }
 
-  // TODO: Regular, Sink, Source, Isolated
-  enum VertexType
-  {
-    Regular = 0, Secondary, Tertiary, Isolated
-  };
 
-  std::pair<VertexType, uint32_t> map(uint32_t idx) const
+  VertexType get_vertex_type(uint32_t idx) const
   {
-    // assert(buffer[3] == 2);
-
     idx = array()[idx];
-    uint32_t beyond_regular = idx >= nregular();
-    uint32_t beyond_sink = idx >= nregular() + nsink();
-    uint32_t beyond_source = idx >= nregular() + nsink() + nsource();
-
-    VertexType t = (VertexType) (beyond_regular + beyond_sink + beyond_source);
-    uint32_t idx_ = idx - (beyond_regular ? nregular() : 0) - (beyond_sink ? nsink() : 0)
-                    - (beyond_source ? nsource() : 0);
-
-    return { t, idx_ };
+    uint32_t beyond_regular = idx >= nregular() ? 1 : 0;
+    uint32_t beyond_sink = idx >= nregular() + nsink() ? 1 : 0;
+    uint32_t beyond_source = idx >= nregular() + nsink() + nsource() ? 1 : 0;
+    return (VertexType) (beyond_regular + beyond_sink + beyond_source);
   }
+
 
 public:
 
@@ -110,7 +101,6 @@ public:
     regular.rewind();
     sink.rewind();
     source.rewind();
-
 
     // NOTE: Must be regular, then sink, then source, then the rest.
     while (regular.next(idx))
@@ -139,7 +129,7 @@ public:
 
     nregular() = regular.count();
     nsecondary() = secondary.count();
-    ntertiary() = 0;
+    //ntertiary() = 0;
 
     uint32_t idx, pos = 0;
 

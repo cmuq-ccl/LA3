@@ -31,7 +31,7 @@ public:
   std::vector<void*> blobs;
 
 private:
-  std::vector<int32_t> requests;
+  std::vector<MPI_Request> requests;
 
   std::vector<int32_t> indices;
 

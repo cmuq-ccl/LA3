@@ -17,7 +17,7 @@ class Matrix2D
   friend struct Matrix2D_Test;
 
 public:
-  Matrix2D(uint32_t nrows, uint32_t ncols, uint32_t ntiles, Partitioning partitioning);
+  Matrix2D(uint32_t nrows, uint32_t ncols, uint32_t ntiles);
 
   /**
    * Insert a triple into the appropriate tiles[x][y] vector.
@@ -31,8 +31,6 @@ public:
 protected:
   /* Matrix Dimensions in terms of entries and tiles */
   const uint32_t nrows, ncols;
-
-  const Partitioning partitioning;
 
   const uint32_t ntiles, nrowgrps, ncolgrps;
 

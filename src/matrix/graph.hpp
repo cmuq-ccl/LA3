@@ -37,7 +37,7 @@ void Graph<Weight>::free()
 template <class Weight>
 void Graph<Weight>::load_binary(
     std::string filepath_, uint32_t nrows, uint32_t ncols, bool directed_,
-    bool reverse_edges, bool remove_cycles, Hashing hashing_, Partitioning partitioning_)
+    bool reverse_edges, bool remove_cycles, bool bipartite_, Hashing hashing_)
 {
   assert(A == nullptr);
 
@@ -46,16 +46,17 @@ void Graph<Weight>::load_binary(
   // Initialize graph meta.
   filepath = filepath_;
   nvertices = nrows;
-  mvertices = ncols;
   nedges = 0;  // TODO
   directed = directed_;
+  bipartite = bipartite_;
   hashing = hashing_;
-  partitioning = partitioning_;
 
-  // Detect bipartite
-  bool bipartite = nrows != ncols;
   if (bipartite)
-    nvertices = mvertices = nrows + ncols;
+  {
+    nvertices = nrows + ncols;
+    nvertices_left = nrows;
+    nvertices_right = ncols;
+  }
 
   if (hashing == Hashing::NONE)
     hasher = new NullHasher();
@@ -96,16 +97,19 @@ void Graph<Weight>::load_binary(
       exit(1);
     }
 
-    nvertices = nrows = header.row + 1;  // HACK: (the "+ 1"; for one/zero-based)
-    mvertices = ncols = header.col + 1;  // HACK: (the "+ 1"; for one/zero-based)
+    nvertices_left = nrows = header.row + 1;  // HACK: (the "+ 1"; for one/zero-based)
+    nvertices_right = ncols = header.col + 1;  // HACK: (the "+ 1"; for one/zero-based)
     nedges = header.weight;
 
     LOG.info("Read header: nvertices = %u, mvertices = %u, nedges (nnz) = %lu \n",
-             nvertices, mvertices, nedges);
+             nvertices_left, nvertices_right, nedges);
 
-    bipartite = nrows != ncols;
     if (bipartite)
-      nvertices = mvertices = nrows + ncols;
+    {
+      nvertices = nrows + ncols;
+      nvertices_left = nrows;
+      nvertices_right = ncols;
+    }
 
     // Let offset and filesize reflect the body of the file.
     offset += sizeof(header);
@@ -120,8 +124,10 @@ void Graph<Weight>::load_binary(
   if (header_present and nedges != ntriples)
     LOG.info("[WARN] Number of edges in header does not match number of edges in file. \n");
 
+  nedges = ntriples;
+
   // Now with nvertices potentially changed, initialize the matrix object.
-  A = new Matrix(nvertices, mvertices, Env::nranks * Env::nranks, partitioning);
+  A = new Matrix(nvertices, nvertices, Env::nranks * Env::nranks);
 
   // Determine current rank's offset and endpos in File.
   share = (filesize / Env::nranks) / sizeof(Triple<Weight>) * sizeof(Triple<Weight>);
@@ -211,52 +217,43 @@ void Graph<Weight>::load_binary(
 template <class Weight>
 void Graph<Weight>::load_text(
     std::string filepath_, uint32_t nrows, uint32_t ncols, bool directed_,
-    bool reverse_edges, bool remove_cycles, Hashing hashing_, Partitioning partitioning_)
+    bool reverse_edges, bool remove_cycles, bool bipartite_, Hashing hashing_)
 { LOG.info("Not implemented \n"); exit(1); }  // TODO: Implement
 
 
 template <class Weight>
 void Graph<Weight>::load_directed(
     bool binary, std::string filepath_, uint32_t nvertices_,
-    bool reverse_edges, bool remove_cycles, Hashing hashing_, Partitioning partitioning_)
+    bool reverse_edges, bool remove_cycles, Hashing hashing_)
 {
   if (binary)
-    load_binary(filepath_, nvertices_, nvertices_, true, reverse_edges, remove_cycles,
-                hashing_, partitioning_);
+    load_binary(filepath_, nvertices_, nvertices_,
+                true, reverse_edges, remove_cycles, false, hashing_);
   else
-    load_text(filepath_, nvertices_, nvertices_, true, reverse_edges, remove_cycles,
-              hashing_, partitioning_);
+    load_text(filepath_, nvertices_, nvertices_,
+              true, reverse_edges, remove_cycles, false, hashing_);
 }
 
 
 template <class Weight>
 void Graph<Weight>::load_undirected(
-    bool binary, std::string filepath_, uint32_t nvertices_,
-    Hashing hashing_, Partitioning partitioning_)
+    bool binary, std::string filepath_, uint32_t nvertices_, Hashing hashing_)
 {
   if (binary)
-    load_binary(filepath_, nvertices_, nvertices_, false, false, false, hashing_, partitioning_);
+    load_binary(filepath_, nvertices_, nvertices_, false, false, false, false, hashing_);
   else
-    load_text(filepath_, nvertices_, nvertices_, false, false, false, hashing_, partitioning_);
+    load_text(filepath_, nvertices_, nvertices_, false, false, false, false, hashing_);
 }
 
 
 template <class Weight>
 void Graph<Weight>::load_bipartite(
     bool binary, std::string filepath_, uint32_t nvertices_, uint32_t mvertices_,
-    bool directed, bool reverse_edges, Hashing hashing_, Partitioning partitioning_)
+    bool directed, bool reverse_edges, Hashing hashing_)
 {
   if (binary)
-    load_binary(filepath_, nvertices_, mvertices_, directed, reverse_edges, false,
-                hashing_, partitioning_);
+    load_binary(filepath_, nvertices_, mvertices_, directed, reverse_edges, false, true, hashing_);
   else
-    load_text(filepath_, nvertices_, mvertices_, directed, reverse_edges, false,
-              hashing_, partitioning_);
+    load_text(filepath_, nvertices_, mvertices_, directed, reverse_edges, false, true, hashing_);
 }
 
-
-template <class Weight>
-void Graph<Weight>::load_labels(std::string& filepath_)
-{
-
-}

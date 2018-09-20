@@ -86,18 +86,8 @@ void VertexProgram<W, M, A, S>::initialize()
 {
   initialize_flags();
 
-  if (G->get_partitioning() == Partitioning::_2D)
-  {
-    for (auto& xseg : x->incoming.regular) xseg.recv();
-    for (auto& xseg : x->incoming.source) xseg.recv();
-  }
-
-  if (gather_depends_on_state)
-  {
-    v->allocate_mirrors();
-    for (auto& vseg : v->mir_segs_reg->segs) vseg.recv();
-    for (auto& vseg : v->mir_segs_snk->segs) vseg.recv();
-  }
+  for (auto& xseg : x->incoming.regular) xseg.recv();
+  if (G->is_directed()) for (auto& xseg : x->incoming.source) xseg.recv();
 
   for (auto& vseg : v->own_segs)
   {
@@ -114,53 +104,41 @@ void VertexProgram<W, M, A, S>::initialize()
       uint32_t idx = (uint32_t) G->get_hasher()->unhash(hidx);
       if (init(idx, vseg[i]))
       {
-        vseg.activity->push(i);
+        //vseg.activity->push(i);
         xseg.push(i, scatter(vseg[i]));
       }
     }
 
-    if (gather_depends_on_state)
+    xseg.bcast();
+
+    if (G->is_directed())
     {
-      vseg.bcast();
-      vseg.activity->clear();
-    }
+      // Sink
 
-    if (G->get_partitioning() == Partitioning::_2D)
-      xseg.bcast();
+      for (auto i_ = 0u; i_ < vseg.locator->nsink(); i_++)
+      {
+        auto i = vseg.locator->nregular() + i_;
+        uint32_t idx = vseg.offset + vseg.original_from_internal_map[i];
+        idx = (uint32_t) G->get_hasher()->unhash(idx);
+        if (init(idx, vseg[i]))
+          ; //vseg.activity->push(i);
+      }
 
-    // Sink
+      // Source
 
-    for (auto i_ = 0u; i_ < vseg.locator->nsink(); i_++)
-    {
-      auto i = vseg.locator->nregular() + i_;
-      uint32_t idx = vseg.offset + vseg.original_from_internal_map[i];
-      idx = (uint32_t) G->get_hasher()->unhash(idx);
-      if (init(idx, vseg[i]))
-        vseg.activity->push(i);
-    }
+      assert(xseg_.size() == vseg.locator->nsource());
 
-    if (gather_depends_on_state)
-    {
-      vseg.template bcast<true>();
-      vseg.activity->clear();
-    }
+      for (auto i_ = 0u; i_ < xseg_.size(); i_++)
+      {
+        auto i = vseg.locator->nregular() + vseg.locator->nsink() + i_;
+        uint32_t idx = vseg.offset + vseg.original_from_internal_map[i];
+        idx = (uint32_t) G->get_hasher()->unhash(idx);
+        if (init(idx, vseg[i]))
+          xseg_.push(i_, scatter(vseg[i]));
+      }
 
-    // Source
-
-    assert(xseg_.size() == vseg.locator->nsource());
-
-    for (auto i_ = 0u; i_ < xseg_.size(); i_++)
-    {
-      auto i = vseg.locator->nregular() + vseg.locator->nsink() + i_;
-      uint32_t idx = vseg.offset + vseg.original_from_internal_map[i];
-      idx = (uint32_t) G->get_hasher()->unhash(idx);
-      if (init(idx, vseg[i]))
-        xseg_.push(i_, scatter(vseg[i]));
-    }
-
-
-    if (G->get_partitioning() == Partitioning::_2D)
       xseg_.bcast();
+    }
 
     // Isolated
 
@@ -177,6 +155,260 @@ void VertexProgram<W, M, A, S>::initialize()
       init(idx, vseg[i]);
     }
   }
+
+  if (gather_depends_on_state and not v->mirrors_allocated)
+  {
+    v->template allocate_mirrors<false>();  // Regular
+    if (G->is_directed()) v->template allocate_mirrors<true>();  // Sink
+    v->mirrors_allocated = true;
+
+    /* Mirror active vertex states */
+    //if (mirroring)
+    {
+      if (stationary) activate_all();
+      bcast_active_states_to_mirrors<false>();  // Regular
+      if (G->is_directed()) bcast_active_states_to_mirrors<true>();  // Sink
+      reset_activity();  // Vertex activity need only be maintained for mirroring.
+    }
+  }
+}
+
+
+template <class W, class M, class A, class S>
+void VertexProgram<W, M, A, S>::initialize(const std::vector<uint32_t>& vids)
+{
+  initialize_flags();
+
+  for (auto& xseg : x->incoming.regular) xseg.recv();  // Regular
+  if (G->is_directed()) for (auto& xseg : x->incoming.source) xseg.recv();  // Source
+
+  for (auto& vseg : v->own_segs)
+  {
+    auto& xseg = x->outgoing.regular[vseg.kth];  // Regular
+    auto& xseg_ = x->outgoing.source[vseg.kth];  // Source
+
+    assert(xseg.size() == vseg.locator->nregular());  // Regular
+    assert(xseg_.size() == vseg.locator->nsource());  // Source
+
+    // Filter for local vertices only and initialize them
+
+    for (auto& idx : vids)
+    {
+      uint32_t hidx = (uint32_t) get_graph()->get_hasher()->hash(idx);
+
+      bool is_local = hidx >= vseg.offset and hidx < vseg.offset + vseg.size();
+
+      //LOG.trace<false>("init %u %u %u \n", idx, hidx, is_local);
+
+      if (is_local)
+      {
+        uint32_t vi = vseg.internal_from_original(hidx);
+        uint32_t xi = 0;
+
+        switch (vseg.get_vertex_type(hidx))
+        {
+          case VertexType::Regular:
+            xi = vi;
+            if (init(idx, vseg[vi]))
+            {
+              //vseg.activity->push(vi);
+              xseg.push(xi, scatter(vseg[vi]));
+            }
+            break;
+
+          case VertexType::Source:
+            xi = vi - vseg.locator->nregular() - vseg.locator->nsink();
+            if (init(idx, vseg[vi]))
+              xseg_.push(xi, scatter(vseg[vi]));
+            break;
+
+          case VertexType::Sink:
+            if (init(idx, vseg[vi]))
+              ; //vseg.activity->push(vi);
+            break;
+
+          case VertexType::Isolated:
+            init(idx, vseg[vi]);
+            break;
+
+          default:
+            break;
+        }
+      }
+    }
+
+    xseg.bcast();  // Regular
+    if (G->is_directed()) xseg_.bcast();  // Source
+  }
+
+  if (gather_depends_on_state and not v->mirrors_allocated)
+  {
+    v->template allocate_mirrors<false>();  // Regular
+    if (G->is_directed()) v->template allocate_mirrors<true>();  // Sink
+    v->mirrors_allocated = true;
+
+    /* Mirror active vertex states */
+    //if (mirroring)
+    {
+      if (stationary) activate_all();
+      bcast_active_states_to_mirrors<false>();  // Regular
+      if (G->is_directed()) bcast_active_states_to_mirrors<true>();  // Sink
+      reset_activity();  // Vertex activity need only be maintained for mirroring.
+    }
+  }
+}
+
+
+template <class W, class M, class A, class S>
+template <bool left, bool right>
+void VertexProgram<W, M, A, S>::initialize_bipartite()
+{
+  if (G->is_directed())
+    initialize_bipartite_directed<left, right>();
+  else
+    initialize_bipartite_undirected<left, right>();
+}
+
+/* In a directed bipartite graph, there are no regular vertices. */
+template <class W, class M, class A, class S>
+template <bool left, bool right>
+void VertexProgram<W, M, A, S>::initialize_bipartite_directed()
+{
+  initialize_flags();
+
+  for (auto& xseg : x->incoming.source) xseg.recv();
+
+  for (auto& vseg : v->own_segs)
+  {
+    // Sink
+
+    for (auto i_ = 0u; i_ < vseg.locator->nsink(); i_++)
+    {
+      auto i = vseg.locator->nregular() + i_;
+      uint32_t idx = vseg.offset + vseg.original_from_internal_map[i];
+      idx = (uint32_t) G->get_hasher()->unhash(idx);
+      if ((left and idx <= G->get_nvertices_left()) or (right and idx > G->get_nvertices_left()))
+      {
+        if (init(idx, vseg[i]))
+          ; //vseg.activity->push(i);
+      }
+    }
+
+    // Source
+
+    auto& xseg_ = x->outgoing.source[vseg.kth];
+
+    assert(xseg_.size() == vseg.locator->nsource());
+
+    for (auto i_ = 0u; i_ < xseg_.size(); i_++)
+    {
+      auto i = vseg.locator->nregular() + vseg.locator->nsink() + i_;
+      uint32_t idx = vseg.offset + vseg.original_from_internal_map[i];
+      idx = (uint32_t) G->get_hasher()->unhash(idx);
+      if ((left and idx <= G->get_nvertices_left()) or (right and idx > G->get_nvertices_left()))
+      {
+        if (init(idx, vseg[i]))
+          xseg_.push(i_, scatter(vseg[i]));
+      }
+    }
+
+    xseg_.bcast();
+
+    // Isolated
+
+    uint32_t isolated_offset
+        = vseg.locator->nregular() + vseg.locator->nsink() + vseg.locator->nsource();
+
+    uint32_t nisolated = vseg.size() - isolated_offset;
+
+    for (auto i_ = 0u; i_ < nisolated; i_++)
+    {
+      auto i = isolated_offset + i_;
+      uint32_t hidx = vseg.offset + vseg.original_from_internal_map[i];
+      uint32_t idx = (uint32_t) G->get_hasher()->unhash(hidx);
+      if ((left and idx <= G->get_nvertices_left()) or (right and idx > G->get_nvertices_left()))
+        init(idx, vseg[i]);
+    }
+  }
+
+  if (gather_depends_on_state and not v->mirrors_allocated)
+  {
+    v->template allocate_mirrors<true>();  // Sink
+    v->mirrors_allocated = true;
+
+    /* Mirror active vertex states */
+    //if (mirroring)
+    {
+      if (stationary) activate_all();
+      bcast_active_states_to_mirrors<true>();  // Sink
+      reset_activity();  // Vertex activity need only be maintained for mirroring.
+    }
+  }
+}
+
+/* In an undirected bipartite graph, there are no source or sink vertices. */
+template <class W, class M, class A, class S>
+template <bool left, bool right>
+void VertexProgram<W, M, A, S>::initialize_bipartite_undirected()
+{
+  initialize_flags();
+
+  for (auto& xseg : x->incoming.regular) xseg.recv();
+
+  for (auto& vseg : v->own_segs)
+  {
+    auto& xseg = x->outgoing.regular[vseg.kth];
+
+    // Regular
+
+    assert(xseg.size() == vseg.locator->nregular());
+
+    for (auto i = 0u; i < xseg.size(); i++)
+    {
+      uint32_t hidx = vseg.offset + vseg.original_from_internal_map[i];
+      uint32_t idx = (uint32_t) G->get_hasher()->unhash(hidx);
+      if ((left and idx <= G->get_nvertices_left()) or (right and idx > G->get_nvertices_left()))
+      {
+        if (init(idx, vseg[i]))
+        {
+          ; //vseg.activity->push(i);
+          xseg.push(i, scatter(vseg[i]));
+        }
+      }
+    }
+
+    xseg.bcast();
+
+    // Isolated
+
+    uint32_t isolated_offset
+        = vseg.locator->nregular() + vseg.locator->nsink() + vseg.locator->nsource();
+
+    uint32_t nisolated = vseg.size() - isolated_offset;
+
+    for (auto i_ = 0u; i_ < nisolated; i_++)
+    {
+      auto i = isolated_offset + i_;
+      uint32_t hidx = vseg.offset + vseg.original_from_internal_map[i];
+      uint32_t idx = (uint32_t) G->get_hasher()->unhash(hidx);
+      if ((left and idx <= G->get_nvertices_left()) or (right and idx > G->get_nvertices_left()))
+        init(idx, vseg[i]);
+    }
+  }
+
+  if (gather_depends_on_state and not v->mirrors_allocated)
+  {
+    v->template allocate_mirrors<false>();  // Regular
+    v->mirrors_allocated = true;
+
+    /* Mirror active vertex states */
+    //if (mirroring)
+    {
+      if (stationary) activate_all();
+      bcast_active_states_to_mirrors<false>();  // Regular
+      reset_activity();  // Vertex activity need only be maintained for mirroring.
+    }
+  }
 }
 
 
@@ -188,74 +420,61 @@ void VertexProgram<W, M, A, S>::initialize(const VertexProgram<W2, M2, A2, S2>& 
 {
   initialize_flags();
 
-  if (G->get_partitioning() == Partitioning::_2D)
-  {
-    for (auto& xseg : x->incoming.regular) xseg.recv();
-    for (auto& xseg : x->incoming.source) xseg.recv();
-  }
-
-  if (gather_depends_on_state)
-  {
-    v->allocate_mirrors();
-    for (auto& vseg : v->mir_segs_reg->segs) vseg.recv();
-    for (auto& vseg : v->mir_segs_snk->segs) vseg.recv();
-  }
+  for (auto& xseg : x->incoming.regular) xseg.recv();
+  if (G->is_directed()) for (auto& xseg : x->incoming.source) xseg.recv();
 
   for (auto& vseg : v->own_segs)
   {
     auto& xseg = x->outgoing.regular[vseg.kth];
     auto& xseg_ = x->outgoing.source[vseg.kth];
 
+    // Regular
+
     for (auto i = 0u; i < xseg.size(); i++)
     {
-      uint32_t idx = vseg.offset + vseg.original_from_internal_map[i];
-      idx = (uint32_t) G->get_hasher()->unhash(idx);
+      uint32_t hidx = vseg.offset + vseg.original_from_internal_map[i];
+      uint32_t idx = (uint32_t) G->get_hasher()->unhash(hidx);
       if (init(idx, (other.get_vector_v()->own_segs[vseg.kth][i]), vseg[i]))
       {
-        vseg.activity->push(i);
+        ; //vseg.activity->push(i);
         xseg.push(i, scatter(vseg[i]));
       }
     }
 
-    if (gather_depends_on_state)
+    xseg.bcast();
+
+    if (G->is_directed())
     {
-      vseg.bcast();
-      vseg.activity->clear();
-    }
+      // Sink
 
-    if (G->get_partitioning() == Partitioning::_2D)
-      xseg.bcast();
+      for (auto i_ = 0u; i_ < vseg.locator->nsink(); i_++)
+      {
+        auto i = vseg.locator->nregular() + i_;
+        auto j = vseg.locator->nregular() + vseg.locator->nsource() + i_;
+        uint32_t idx = vseg.offset + vseg.original_from_internal_map[i];
+        idx = (uint32_t) G->get_hasher()->unhash(idx);
+        if (init(idx, (other.get_vector_v()->own_segs[vseg.kth][j]), vseg[i]))
+          ; //vseg.activity->push(i);
+      }
 
-    for (auto i_ = 0u; i_ < vseg.locator->nsink(); i_++)
-    {
-      auto i = vseg.locator->nregular() + i_;
-      auto j = vseg.locator->nregular() + vseg.locator->nsource() + i_;
-      uint32_t idx = vseg.offset + vseg.original_from_internal_map[i];
-      idx = (uint32_t) G->get_hasher()->unhash(idx);
-      if (init(idx, (other.get_vector_v()->own_segs[vseg.kth][j]), vseg[i]))
-        vseg.activity->push(i);
-    }
+      // Source
 
-    if (gather_depends_on_state)
-    {
-      vseg.template bcast<true>();
-      vseg.activity->clear();
-    }
+      assert(xseg_.size() == vseg.locator->nsource());
 
-    assert(xseg_.size() == vseg.locator->nsource());
+      for (auto i_ = 0u; i_ < xseg_.size(); i_++)
+      {
+        auto j = vseg.locator->nregular() + i_;
+        auto i = vseg.locator->nregular() + vseg.locator->nsink() + i_;
+        uint32_t idx = vseg.offset + vseg.original_from_internal_map[i];
+        idx = (uint32_t) G->get_hasher()->unhash(idx);
+        if (init(idx, (other.get_vector_v()->own_segs[vseg.kth][j]), vseg[i]))
+          xseg_.push(i_, scatter(vseg[i]));
+      }
 
-    for (auto i_ = 0u; i_ < xseg_.size(); i_++)
-    {
-      auto j = vseg.locator->nregular() + i_;
-      auto i = vseg.locator->nregular() + vseg.locator->nsink() + i_;
-      uint32_t idx = vseg.offset + vseg.original_from_internal_map[i];
-      idx = (uint32_t) G->get_hasher()->unhash(idx);
-      if (init(idx, (other.get_vector_v()->own_segs[vseg.kth][j]), vseg[i]))
-        xseg_.push(i_, scatter(vseg[i]));
-    }
-
-    if (G->get_partitioning() == Partitioning::_2D)
       xseg_.bcast();
+    }
+
+    // Isolated
 
     uint32_t isolated_offset
         = vseg.locator->nregular() + vseg.locator->nsink() + vseg.locator->nsource();
@@ -265,15 +484,32 @@ void VertexProgram<W, M, A, S>::initialize(const VertexProgram<W2, M2, A2, S2>& 
     for (auto i_ = 0u; i_ < nisolated; i_++)
     {
       auto i = isolated_offset + i_;
-      uint32_t idx = vseg.offset + vseg.original_from_internal_map[i];
-      idx = (uint32_t) G->get_hasher()->unhash(idx);
+      uint32_t hidx = vseg.offset + vseg.original_from_internal_map[i];
+      uint32_t idx = (uint32_t) G->get_hasher()->unhash(hidx);
       init(idx, (other.get_vector_v()->own_segs[vseg.kth][i]), vseg[i]);
+    }
+  }
+
+  if (gather_depends_on_state and not v->mirrors_allocated)
+  {
+    v->template allocate_mirrors<false>();  // Regular
+    if (G->is_directed()) v->template allocate_mirrors<true>();  // Sink
+    v->mirrors_allocated = true;
+
+    /* Mirror active vertex states */
+    //if (mirroring)
+    {
+      if (stationary) activate_all();
+      bcast_active_states_to_mirrors<false>();  // Regular
+      if (G->is_directed()) bcast_active_states_to_mirrors<true>();  // Sink
+      reset_activity();  // Vertex activity need only be maintained for mirroring.
     }
   }
 }
 
 
 template <class W, class M, class A, class S>
+template<bool values_only>
 void VertexProgram<W, M, A, S>::display(uint32_t nvertices)
 {
   nvertices = std::min(nvertices, G->get_nvertices());
@@ -286,15 +522,37 @@ void VertexProgram<W, M, A, S>::display(uint32_t nvertices)
       auto loc = own_vseg.internal_from_original(j);
       j = get_graph()->get_hasher()->unhash(j);
       if (j >= 0 and j <= nvertices)
-        LOG.info<false>("%u %s\n", j, own_vseg[loc].to_string().c_str());
+      {
+        if (values_only)
+        {
+          std::string str = own_vseg[loc].to_string();
+          LOG.info<false, false>("%s\n", str.c_str());
+          if (not Env::is_master)
+            Env::nbytes_sent += str.size() + 1;
+        }
+        else
+        {
+          std::string str = std::to_string(j) + ": " + own_vseg[loc].to_string();
+          LOG.info<false>("%s\n", str.c_str());
+          if (not Env::is_master)
+            Env::nbytes_sent += str.size() + 1;
+        }
+      }
     }
   }
+
+  if (values_only)
+    LOG.info<false, false>("\n");
 }
 
 
 template <class W, class M, class A, class S>
 void VertexProgram<W, M, A, S>::reset_activity()
 { for (auto& vseg : v->own_segs) vseg.activity->clear(); }
+
+template <class W, class M, class A, class S>
+void VertexProgram<W, M, A, S>::activate_all()
+{ for (auto& vseg : v->own_segs) vseg.activity->fill(); }
 
 
 /* TODO: We only support trivially-serializable types for reduce(). */
@@ -392,6 +650,13 @@ void VertexProgram<W, M, A, S>::topk(uint32_t k, std::vector<std::pair<I, V>>& t
     ivs.resize(k * Env::nranks);
     MPI_Gather(MPI_IN_PLACE, 0, MPI_DATATYPE_NULL, ivs.data(), sizeof(iv_t) * k, MPI_BYTE,
                0, Env::MPI_WORLD);
+
+    // Step 4: Find top-k at master
+    std::partial_sort(ivs.begin(), ivs.begin() + std::min(k, (uint32_t) ivs.size()), ivs.end(), cmp);
+    ivs.resize(k);
+
+    for (auto const& iv : ivs)
+      topk.push_back(iv);
   }
   else
   {
@@ -400,6 +665,8 @@ void VertexProgram<W, M, A, S>::topk(uint32_t k, std::vector<std::pair<I, V>>& t
                0, Env::MPI_WORLD);
   }
 
+  /* Only needed for blind feedback.  Skip for now. *
+   *
   // Step 4: Find top-k at master
   std::partial_sort(ivs.begin(), ivs.begin() + std::min(k, (uint32_t) ivs.size()), ivs.end(), cmp);
   ivs.resize(k);
@@ -409,8 +676,8 @@ void VertexProgram<W, M, A, S>::topk(uint32_t k, std::vector<std::pair<I, V>>& t
 
   for (auto iv : ivs)
     topk.push_back(iv);
+  /**/
 }
-
 
 /* Batched top-k */
 /* TODO: We only support trivially-serializable types for topk(). */

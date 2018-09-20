@@ -37,20 +37,14 @@ public:
 
   void load_directed(bool binary, std::string filepath_, uint32_t nvertices_ = 0,
                      bool reverse_edges = false, bool remove_cycles = false,
-                     Hashing hashing_ = Hashing::BUCKET,
-                     Partitioning partitioning_ = Partitioning::_2D);
+                     Hashing hashing_ = Hashing::BUCKET);
 
   void load_undirected(bool binary, std::string filepath_, uint32_t nvertices_ = 0,
-                       Hashing hashing_ = Hashing::BUCKET,
-                       Partitioning partitioning_ = Partitioning::_2D);
+                       Hashing hashing_ = Hashing::BUCKET);
 
   void load_bipartite(bool binary, std::string filepath_, uint32_t nvertices_, uint32_t mvertices_,
                       bool directed = true, bool reverse_edges = false,
-                      Hashing hashing_ = Hashing::NONE,
-                      Partitioning partitioning_ = Partitioning::_2D);
-
-  void load_labels(std::string& filepath_);
-
+                      Hashing hashing_ = Hashing::NONE);
 
   /* Delete the underlying matrix. */
 
@@ -63,17 +57,17 @@ private:
 
   std::string filepath;
 
-  uint32_t nvertices;
+  uint32_t nvertices = 0;
 
-  uint32_t mvertices;  /** For bipartite graphs **/
+  bool bipartite;
+  uint32_t nvertices_left = 0;
+  uint32_t nvertices_right = 0;
 
-  uint64_t nedges;
+  uint64_t nedges = 0;
 
   bool directed;
 
   Hashing hashing;
-
-  Partitioning partitioning;
 
 
   /* (Distributed) Matrix Representation */
@@ -90,13 +84,11 @@ private:
 
 
   void load_binary(std::string filepath_, uint32_t nrows, uint32_t ncols, bool directed_,
-                   bool reverse_edges, bool remove_cycles,
-                   Hashing hashing_, Partitioning partitioning_);
+                   bool reverse_edges, bool remove_cycles, bool bipartite_, Hashing hashing_);
 
 
   void load_text(std::string filepath_, uint32_t nrows, uint32_t ncols, bool directed_,
-                 bool reverse_edges, bool remove_cycles,
-                 Hashing hashing_, Partitioning partitioning_);
+                 bool reverse_edges, bool remove_cycles, bool bipartite_, Hashing hashing_);
 
 
 public:
@@ -104,16 +96,17 @@ public:
   /* Getters */
 
   uint32_t get_nvertices() const { return nvertices; }
-
-  uint32_t get_mvertices() const { return mvertices; }
+  uint32_t get_nedges() const { return nedges; }
 
   const Matrix* get_matrix() const { return A; }
 
   bool is_directed() const { return directed; }
 
-  const ReversibleHasher* get_hasher() const { return hasher; }
+  bool is_bipartite() const { return bipartite; }
+  uint32_t get_nvertices_left() const { return nvertices_left; }
+  uint32_t get_nvertices_right() const { return nvertices_right; }
 
-  Partitioning get_partitioning() const { return partitioning; }
+  const ReversibleHasher* get_hasher() const { return hasher; }
 
 };
 

@@ -3,8 +3,8 @@
 
 template <class Weight, class Annotation>
 CSCMatrix2D<Weight, Annotation>::CSCMatrix2D(
-    uint32_t nrows, uint32_t ncols, uint32_t ntiles, Partitioning partitioning)
-    : Base(nrows, ncols, ntiles, partitioning) {}
+    uint32_t nrows, uint32_t ncols, uint32_t ntiles)
+    : Base(nrows, ncols, ntiles) {}
 
 template <class Weight, class Annotation>
 CSCMatrix2D<Weight, Annotation>::~CSCMatrix2D()

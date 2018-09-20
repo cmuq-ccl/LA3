@@ -7,8 +7,8 @@
 
 template <class Weight, class Annotation>
 AnnotatedMatrix2D<Weight, Annotation>::AnnotatedMatrix2D(
-    uint32_t nrows, uint32_t ncols, uint32_t ntiles, Partitioning partitioning)
-    : Base(nrows, ncols, ntiles, partitioning)
+    uint32_t nrows, uint32_t ncols, uint32_t ntiles)
+    : Base(nrows, ncols, ntiles)
 {
   /* Find rowgroups and colgroups with tiles local to self (aka. local row/colgroups). */
   std::set<uint32_t> local_rowgrp_indices;  // Must be an ordered set (for order of iteration).

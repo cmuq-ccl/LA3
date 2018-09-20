@@ -3,12 +3,15 @@
 #include <numeric>
 #include <algorithm>
 #include <cassert>
+#include <atomic>
 #include "utils/env.h"
 
 
 int Env::rank  ;  // my rank
 
 int Env::nranks;  // num of ranks
+
+std::atomic_size_t Env::nbytes_sent;
 
 bool Env::is_master;  // rank == 0?
 
@@ -24,6 +27,8 @@ void Env::init(RankOrder order)
   MPI_Comm_size(MPI_COMM_WORLD, &nranks);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   is_master = rank == 0;
+
+  nbytes_sent = 0;
 
   MPI_WORLD = MPI_COMM_WORLD;
   if (order != RankOrder::KEEP_ORIGINAL)
@@ -41,6 +46,15 @@ void Env::exit(int code)
 
 void Env::barrier()
 { MPI_Barrier(MPI_WORLD); }
+
+size_t Env::get_global_comm_nbytes()
+{
+  size_t local_nbytes_sent = nbytes_sent;
+  size_t total_nbytes_sent;
+  MPI_Allreduce((const void *)&local_nbytes_sent, &total_nbytes_sent, 1,
+  MPI_UNSIGNED_LONG, MPI_SUM, Env::MPI_WORLD);
+  return total_nbytes_sent;
+}
 
 
 void Env::shuffle_ranks(RankOrder order)

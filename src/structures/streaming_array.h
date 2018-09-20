@@ -10,7 +10,7 @@
 #include "structures/communicable.h"
 
 
-template <class Value, class ActivitySet=Communicable<SerializableBitVector>>
+template <class Value, class ActivitySet = Communicable<SerializableBitVector>>
 class StreamingArray
 {
 public:

@@ -3,11 +3,9 @@
 
 
 template <class Weight, class Tile>
-Matrix2D<Weight, Tile>::Matrix2D(uint32_t nrows, uint32_t ncols, uint32_t ntiles,
-                                 Partitioning partitioning)
+Matrix2D<Weight, Tile>::Matrix2D(uint32_t nrows, uint32_t ncols, uint32_t ntiles)
     : nrows(nrows), ncols(ncols), ntiles(ntiles), nrowgrps(sqrt(ntiles)), ncolgrps(ntiles / nrowgrps),
-      tile_height((nrows / nrowgrps) + 1), tile_width((ncols / ncolgrps) + 1),
-      partitioning(partitioning)
+      tile_height((nrows / nrowgrps) + 1), tile_width((ncols / ncolgrps) + 1)
 {
   /* Matrix must be square, and ntiles must be a square number. */
   assert(nrows > 0 && nrows == ncols);

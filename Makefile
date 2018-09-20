@@ -1,6 +1,6 @@
 # C++ and MPI Compilers (minimum -std=c++14)
-CXX = g++
-MPI_CXX = mpicxx
+CXX = g++ -std=c++14
+MPI_CXX = mpicxx -std=c++14
 
 
 # Usage:
@@ -61,8 +61,9 @@ apps: ga_all ir_all gs_all
 
 tools:
 	@mkdir -p bin/tools
-	$(CXX) -std=c++14 $(DNWARN) $(OPTIMIZE) $(DEBUG) src/tools/mtx2bin.cpp -o bin/tools/mtx2bin
-	$(MPI_CXX) -std=c++14 $(DNWARN) $(OPTIMIZE) $(DEBUG) src/tools/cw2bin.cpp \
+	$(CXX) $(DNWARN) $(OPTIMIZE) $(DEBUG) src/tools/mtx2bin.cpp -o bin/tools/mtx2bin
+	$(CXX) $(DNWARN) $(OPTIMIZE) $(DEBUG) src/tools/bin2mtx.cpp -o bin/tools/bin2mtx
+	$(MPI_CXX) $(DNWARN) $(THREADED) $(OPTIMIZE) $(DEBUG) src/tools/cw2bin.cpp \
 			-lboost_serialization -lboost_mpi -o bin/tools/cw2bin
 
 run: #$(app)
@@ -71,5 +72,5 @@ run: #$(app)
 
 .DEFAULT:
 	@mkdir -p bin/$(tk)
-	$(MPI_CXX) -std=c++14 $(DNWARN) $(THREADED) $(OPTIMIZE) $(DEBUG) \
-		$(SRC_UTILS) src/apps/$(tk)/$@.cpp -lboost_serialization -I src -o bin/$(tk)/$@
+	$(MPI_CXX) $(DNWARN) $(THREADED) $(OPTIMIZE) $(DEBUG) \
+		$(SRC_UTILS) src/apps/$(tk)/$@.cpp -lboost_serialization -lboost_mpi -I src -o bin/$(tk)/$@

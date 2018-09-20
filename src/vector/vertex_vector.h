@@ -23,8 +23,6 @@ public:
 
   const Matrix* A;
 
-  bool mirrored = false;
-
   /**
    * Master vertex segments.
    *
@@ -58,6 +56,8 @@ public:
 
   MirrorSegments* mir_segs_snk = nullptr;
 
+  bool mirrors_allocated = false;
+
 public:
 
   VertexVector(const Matrix* A) : A(A)
@@ -77,33 +77,29 @@ public:
     mir_segs_snk = nullptr;
   }
 
+  template <bool sink>
   void allocate_mirrors()
   {
-    //LOG.info("Vertex states mirrored? %u\n", mirrored);
+    LOG.debug("Allocating mirrors (sink=%u) ... \n", sink);
 
     for (auto& vseg : own_segs)
-      vseg.allocate_mirrors();  // outgoing
+      vseg.allocate_mirrors<sink>();  // outgoing
 
-    mir_segs_reg = new MirrorSegments;  // incoming
-    mir_segs_snk = new MirrorSegments;  // incoming
+    MirrorSegments*& mir_segs = sink ? mir_segs_snk : mir_segs_reg;
+
+    mir_segs = new MirrorSegments;  // incoming
 
     /* Mirror segments are for local row groups. */
-    mir_segs_reg->segs.reserve(A->local_rowgrps.size());
-    mir_segs_snk->segs.reserve(A->local_rowgrps.size());
+    mir_segs->segs.reserve(A->local_rowgrps.size());
 
-    mir_segs_reg->num_outstanding = 0;
-    mir_segs_snk->num_outstanding = 0;
+    mir_segs->num_outstanding = 0;
 
     for (auto& rowgrp : A->local_rowgrps)
-    {
-      mir_segs_reg->segs.emplace_back(&rowgrp, mir_segs_reg->requests, mir_segs_reg->blobs,
-                                      mir_segs_reg->num_outstanding, false);
-      mir_segs_snk->segs.emplace_back(&rowgrp, mir_segs_snk->requests, mir_segs_snk->blobs,
-                                      mir_segs_snk->num_outstanding, true);
-    }
+      mir_segs->segs.emplace_back(&rowgrp, mir_segs->requests, mir_segs->blobs,
+                                  mir_segs->num_outstanding, sink);
   }
 
-  template <bool sink = false>
+  template <bool sink>
   void wait_for_ith(uint32_t ith)
   {
     MirrorSegments* mir_segs = sink ? mir_segs_snk : mir_segs_reg;
@@ -117,9 +113,10 @@ public:
     {
       void*& blob = mir_segs->blobs[ith];
       MPI_Request* request = &mir_segs->requests[ith];
-      Communicable<Array>::irecv_dynamic_one(blob, request);
+      if (std::is_base_of<Serializable, typename Array::Type>::value)
+        Communicable<Array>::irecv_dynamic_one(blob, request);
       MPI_Wait(&mir_segs->requests[ith], MPI_STATUSES_IGNORE);
-      mir_segs->segs[ith].irecv_postprocess(mir_segs->blobs[ith]);
+      mir_segs->segs[ith].irecv_postprocess(blob);
       mir_segs->blobs[ith] = nullptr;
       mir_segs->requests[ith] = MPI_REQUEST_NULL;
     }
