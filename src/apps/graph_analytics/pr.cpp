@@ -43,13 +43,11 @@ void run(std::string filepath, vid_t nvertices, uint32_t niters)
   degree_timer.report();
   pr_timer.report();
 
-  /* For correctness checking */
   long deg_checksum = vp.reduce<long>(
       [&](uint32_t idx, const PrState& s) -> long { return s.degree; },  // mapper
       [&](long& a, const long& b) { a += b; });  // reducer
   LOG.info("Degree Checksum = %lu \n", deg_checksum);
 
-  /* For correctness checking */
   fp_t pr_checksum = vp.reduce<fp_t>(
       [&](uint32_t idx, const PrState& s) -> fp_t { return s.rank; },  // mapper
       [&](fp_t& a, const fp_t& b) { a += b; });  // reducer

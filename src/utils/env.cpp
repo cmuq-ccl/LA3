@@ -66,10 +66,8 @@ void Env::shuffle_ranks(RankOrder order)
     int seed = order == RankOrder::FIXED_SHUFFLE ? 0 : now();
     srand(seed);
     std::iota(ranks.begin(), ranks.end(), 0);  // ranks = range(len(ranks))
-    std::random_shuffle(ranks.begin(), ranks.end());
+    std::random_shuffle(ranks.begin() + 1, ranks.end());
 
-    // Keep master in place
-    std::swap(*ranks.begin(), *std::find(ranks.begin(), ranks.end(), 0));
     assert(ranks[0] == 0);
   }
 

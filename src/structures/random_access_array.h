@@ -136,11 +136,3 @@ private:  /* Further Serialization Implementation. */
 
 
 #endif
-
-
-/*
- * TODO: Consider making activity private and having [de]activate() and public count() in addition
- *       to the sequential access by push(), pop() and next().
- *
- * TODO: Review the recent changes at the bottom of the file! (And in streaming_array.h)
- */

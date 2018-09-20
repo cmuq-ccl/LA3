@@ -41,16 +41,15 @@ Examples:
     - `make run app=tc np=4 args="data/graph_analytics/g1_8_8_13.bin 8"`
 - Information Retrieval:
   - Run BM25 w/ top-k (k=3) on test graph G2 (bipartite: 7 docs, 7 terms, 17 edges):
-    - `make ir run app=bm25 np=4 dd=data/information_retrieval g=g2_7_7_17 ...`
-      - `args="$dd/$g.w.bp.bin $dd/$g.term.labels 7 7 $dd/$g.queries 3"`
+    - `dd=data/information_retrieval; g=g2_7_7_17; ... `
+    - `make ir run app=bm25 np=4 args="$dd/$g.w.bp.bin $dd/$g.term.labels 7 7 $dd/$g.queries 3"`
   - Run Language Modeling (LM) w/ top-k (k=3) on test graph G2:
-    - `make ir run app=lm np=4 dd=data/information_retrieval g=g2_7_7_17 ...`
-      - `args="$dd/$g.w.bp.bin $dd/$g.term.labels 7 7 $dd/$g.queries 3"`
+    - `dd=data/information_retrieval; g=g2_7_7_17; ...`
+    - `make ir run app=lm np=4 args="$dd/$g.w.bp.bin $dd/$g.term.labels 7 7 $dd/$g.queries 3"`
 - Graph Simulation:
   - Run Graph Simulation on test graph G3 (13 vertices) and query graph Q1 (4 vertices):
-    - `make gs run app=graphsim np=4 ... `
-      - `dd=data/graph_simulation g=g3_13_13_20 q=q1_4_4_6 ...`
-      - `args="$dd/$g.labels $dd/$g.bin $dd/$q.labels $dd/$q.mtx"`
+    - `dd=data/graph_simulation; g=g3_13_13_20; q=q1_4_4_6; ...`
+    - `make gs run app=graphsim np=4 args="$dd/$g.labels $dd/$g.bin $dd/$q.labels $dd/$q.mtx"`
     
 Converting a dataset from Matrix Market format to LA3 binary format:
 - `bin/tools/mtx2bin <filepath_in> <filepath_out> [-hi[o]] [-wi] [-wo{i|d}]`

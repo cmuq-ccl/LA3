@@ -30,7 +30,6 @@ void run(std::string filepath, vid_t nvertices, vid_t root)
       [&](long& a, const long& b) { a += b; });  // reducer
   LOG.info("Reachable Vertices = %lu \n", nreachable);
 
-  /* For correctness checking */
   long checksum = vp.reduce<long>(
       [&](uint32_t vid, const SpState& s) -> long { return s.distance.value; },  // mapper
       [&](long& a, const long& b) { a += b; });  // reducer

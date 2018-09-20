@@ -64,10 +64,11 @@ public:
    *       [[Also,]] this is critical for the output of sink entries after their SpMV.
    **/
   VertexMasterSegment(Dashboard* db)
-      : Array(db->regular->size() /* not ->count() ! */), locator(db->locator),
-        ranks_meta(&db->rowgrp_ranks_meta),
+      : Array(db->regular->size() /* not ->count() ! */),
         rg_reg_size(db->rowgrp->globally_regular->size()),
-        rg_sink_size(db->rowgrp->globally_sink->size())
+        rg_sink_size(db->rowgrp->globally_sink->size()),
+        locator(db->locator),
+        ranks_meta(&db->rowgrp_ranks_meta)
   {
     kth = db->kth;
     rg = db->rg;

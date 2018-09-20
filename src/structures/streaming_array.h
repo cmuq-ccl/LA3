@@ -51,12 +51,11 @@ public: /* Constructor(s), Destructor(s), and General Interface. */
   }
 
   /* Non-copyable. */
-  //StreamingArray(const StreamingArray&) = delete; // Yousuf: Allowing.
   const StreamingArray& operator=(const StreamingArray&) = delete;
 
   // Copy constructor: shallow copy by default.
-  StreamingArray(const StreamingArray& other, bool deep = false)
-      : n(other.n), activity(new ActivitySet(*other.activity, true /* shallow is buggy */))
+  StreamingArray(const StreamingArray &other, bool deep = false)
+      : activity(new ActivitySet(*other.activity, true /* shallow is buggy */)), n(other.n)
   {
     owns_vals = deep;
     vals = deep ? (new Value[n + 1]) : other.vals;
@@ -92,8 +91,6 @@ public: /* Sequential Access Operations. */
 
   void push(uint32_t idx, const Value& val)
   {
-    // assert(idx < size());
-    // assert(not activity->check(idx));
     vals[activity->count()] = val;
     activity->push(idx);
   }
@@ -169,10 +166,4 @@ private:  /* Further Serialization Implementation. */
  * This is why the implemenation below simply uses malloc() as opposed to new[].
  *
  * Does not have operator[] or a fill() operation.
- * TODO: Consider having them, with operator[] assert()'ing that activity's count() == size().
- *       But... in that case, can't you just use RandomAccessArray? Any advantage for this?
- *       If this will be a templating issue (i.e., known at compile time), use RandomAccessArray!
- *
- * TODO: How useful would it be to have a single allocation for both bv and vals?
- *       Probably not too much; at least not worth the effort/focus.
  */

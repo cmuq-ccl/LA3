@@ -38,9 +38,8 @@ public:
    **/
   MsgIncomingSegment(const ColGrp* colgrp, std::vector<MPI_Request>& recv_requests,
                      std::vector<void*>& recv_blobs, uint32_t& num_outstanding, bool source)
-      : Array(source ? colgrp->source->count() : colgrp->regular->count()),
-        recv_requests(&recv_requests), recv_blobs(&recv_blobs), num_outstanding(&num_outstanding),
-        source(source)
+      : Array(source ? colgrp->source->count() : colgrp->regular->count()), source(source),
+        recv_requests(&recv_requests), recv_blobs(&recv_blobs), num_outstanding(&num_outstanding)
   {
     jth = colgrp->jth;
     cg = colgrp->cg;
