@@ -71,5 +71,5 @@ Converting a dataset from LA3 binary format to Matrix Market format:
   - LiveJournal (binary pairs to text pairs):
     - `bin/tools/bin2mtx livejournal.bin soc-LiveJournal1.txt`
   - LiveJournal (binary triples to text triples): 
-    - `bin/tools/mtx2bin soc-LiveJournal1.txt livejournal.w.bin -wi -wo`
+    - `bin/tools/bin2mtx soc-LiveJournal1.txt livejournal.w.bin -wi -wo`
     
