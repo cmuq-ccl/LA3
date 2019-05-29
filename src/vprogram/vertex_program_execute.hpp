@@ -5,7 +5,7 @@
 #ifndef BATCH_VERTEX_PROGRAM_EXECUTE_HPP
 #define BATCH_VERTEX_PROGRAM_EXECUTE_HPP
 
-#include "vprogram/batching/vertex_program.h"
+//#include "vprogram/batching/vertex_program.h"
 
 
 template <class W, class M, class A, class S>
